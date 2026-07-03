@@ -1,0 +1,22 @@
+{
+  "name": "ninjaskates",
+  "version": "0.1.0",
+  "description": "NinjaSkates — browser-based multiplayer arena deathmatch. Ninjas on skateboards pick up weapons and smash each other.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "three": "^0.160.0",
+    "ws": "^8.17.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>NinjaSkates</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥷</text></svg>" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ============================== MENU ============================== -->
+  <div id="menu">
+    <div class="menu-card">
+      <h1 class="logo">Ninja<span>Skates</span></h1>
+      <p class="tagline">Skate. Snatch. Smash.</p>
+
+      <label class="field">
+        <span>Your ninja name</span>
+        <input id="name-input" maxlength="14" placeholder="ShadowBlade" autocomplete="off" />
+      </label>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="quick">Quick Play</button>
+        <button class="tab" data-tab="create">Create Room</button>
+        <button class="tab" data-tab="join">Join Room</button>
+      </div>
+
+      <div class="tab-panel" id="panel-quick">
+        <p class="hint">Jump into a public room with players around the world.</p>
+        <button id="btn-quick" class="cta">Skate Now</button>
+      </div>
+
+      <div class="tab-panel hidden" id="panel-create">
+        <div class="field"><span>Map</span>
+          <div class="map-grid" id="map-grid">
+            <button class="map-card active" data-map="skatepark">🛹 Sunset Skatepark</button>
+            <button class="map-card" data-map="neon">🌌 Neon Rink</button>
+            <button class="map-card" data-map="rooftop">🏙️ Rooftop Rumble</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><span>Match length</span>
+            <div class="pill-group" id="duration-group">
+              <button class="pill active" data-min="3">3 min</button>
+              <button class="pill" data-min="6">6 min</button>
+            </div>
+          </div>
+          <div class="field"><span>Bots</span>
+            <div class="pill-group" id="bots-group">
+              <button class="pill" data-bots="0">0</button>
+              <button class="pill active" data-bots="3">3</button>
+              <button class="pill" data-bots="6">6</button>
+            </div>
+          </div>
+        </div>
+        <button id="btn-create" class="cta">Create &amp; Get Link</button>
+      </div>
+
+      <div class="tab-panel hidden" id="panel-join">
+        <label class="field"><span>Room code</span>
+          <input id="room-input" maxlength="5" placeholder="ABCDE" autocomplete="off" style="text-transform:uppercase" />
+        </label>
+        <button id="btn-join" class="cta">Join Friends</button>
+      </div>
+
+      <p id="menu-error" class="error hidden"></p>
+      <p class="controls-hint">WASD / arrows to skate · Space or click to attack</p>
+    </div>
+  </div>
+
+  <!-- =============================== HUD =============================== -->
+  <div id="hud" class="hidden">
+    <div id="damage-flash"></div>
+
+    <div id="hud-top">
+      <div id="room-tag">
+        <span id="room-code"></span>
+        <button id="btn-copy" title="Copy invite link">🔗 Invite</button>
+      </div>
+      <div id="match-timer">3:00</div>
+      <div id="leaderboard"></div>
+    </div>
+
+    <div id="killfeed"></div>
+    <div id="pickup-banner" class="hidden"></div>
+
+    <div id="hud-bottom">
+      <div id="health-wrap"><div id="health-bar"></div><span id="health-num">100</span></div>
+      <div id="weapon-slot"><span id="weapon-name">No weapon</span><span id="weapon-ammo"></span></div>
+      <div id="net-stats"><span id="ping">--ms</span> · <span id="fps">60fps</span></div>
+    </div>
+
+    <div id="respawn-overlay" class="center-overlay hidden">
+      <h2>SMASHED!</h2>
+      <p>Back on your board in <span id="respawn-secs">3</span>…</p>
+    </div>
+
+    <div id="results-overlay" class="center-overlay hidden">
+      <h2>Match Over</h2>
+      <table id="results-table"></table>
+      <p class="hint">Next match starting in <span id="results-secs">12</span>…</p>
+    </div>
+
+    <!-- touch controls -->
+    <div id="touch-stick"><div id="touch-knob"></div></div>
+    <div id="touch-fire">⚔️</div>
+  </div>
+
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
