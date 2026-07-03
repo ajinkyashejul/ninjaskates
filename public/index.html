@@ -75,9 +75,12 @@
     <div id="damage-flash"></div>
 
     <div id="hud-top">
-      <div id="room-tag">
-        <span id="room-code"></span>
-        <button id="btn-copy" title="Copy invite link">🔗 Invite</button>
+      <div id="hud-left">
+        <div id="rank-chip">–</div>
+        <div id="room-tag">
+          <span id="room-code"></span>
+          <button id="btn-copy" title="Copy invite link">🔗 Invite</button>
+        </div>
       </div>
       <div id="match-timer">3:00</div>
       <div id="leaderboard"></div>
@@ -85,16 +88,21 @@
 
     <div id="killfeed"></div>
     <div id="pickup-banner" class="hidden"></div>
+    <div id="smash-banner" class="hidden"></div>
 
     <div id="hud-bottom">
-      <div id="health-wrap"><div id="health-bar"></div><span id="health-num">100</span></div>
+      <div id="health-wrap">
+        <span id="health-heart">❤️</span>
+        <div id="health-track"><div id="health-bar"></div><span id="health-num">100</span></div>
+      </div>
       <div id="weapon-slot"><span id="weapon-name">No weapon</span><span id="weapon-ammo"></span></div>
       <div id="net-stats"><span id="ping">--ms</span> · <span id="fps">60fps</span></div>
     </div>
 
     <div id="respawn-overlay" class="center-overlay hidden">
       <h2>SMASHED!</h2>
-      <p>Back on your board in <span id="respawn-secs">3</span>…</p>
+      <p id="death-cause"></p>
+      <p>Back on your skates in <span id="respawn-secs">3</span>…</p>
     </div>
 
     <div id="results-overlay" class="center-overlay hidden">

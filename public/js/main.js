@@ -152,6 +152,8 @@ function processEvents(events) {
         hud.killFeed(ev.kn, ev.vn, ev.w);
         renderer?.spawnExplosion(ev.x, ev.z, true);
         sfx.boom();
+        if (ev.vi === myId) hud.setDeathCause(ev.kn, ev.w);
+        if (ev.ki === myId) { hud.smashBanner(`You smashed ${ev.vn}! 💥`); sfx.pickup(); }
         break;
       case 'boom':
         renderer?.spawnExplosion(ev.x, ev.z, !!ev.big);

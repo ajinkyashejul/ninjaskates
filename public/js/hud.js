@@ -10,6 +10,19 @@ const WEAPON_LABELS = {
   mine: '💣 Smoke Mines',
 };
 
+export const WEAPON_PHRASES = {
+  shuriken: 'shurikens',
+  rocket: 'rocket',
+  minigun: 'minigun',
+  mine: 'smoke mine',
+};
+
+function ordinal(n) {
+  const s = n % 100;
+  if (s >= 11 && s <= 13) return 'th';
+  return { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th';
+}
+
 export class Hud {
   constructor() {
     this.lastStandings = null;
@@ -56,6 +69,25 @@ export class Hud {
     this._bannerTimer = setTimeout(() => b.classList.add('hidden'), 1500);
   }
 
+  smashBanner(text) {
+    const b = $('smash-banner');
+    b.textContent = text;
+    b.classList.remove('hidden');
+    // retrigger the pop animation
+    b.style.animation = 'none';
+    void b.offsetWidth;
+    b.style.animation = '';
+    clearTimeout(this._smashTimer);
+    this._smashTimer = setTimeout(() => b.classList.add('hidden'), 2200);
+  }
+
+  setDeathCause(killerName, weapon) {
+    const el = $('death-cause');
+    el.innerHTML = 'You were smashed by <b></b>';
+    el.querySelector('b').textContent =
+      `${killerName}'s ${WEAPON_PHRASES[weapon] || 'pure style'}`;
+  }
+
   damageFlash() {
     const f = $('damage-flash');
     f.classList.add('show');
@@ -80,8 +112,13 @@ export class Hud {
       timer.textContent = '0:00';
     }
 
-    // leaderboard
+    // leaderboard + my rank chip
     const sorted = [...view.players].sort((a, b) => b.k - a.k || a.d - b.d);
+    const myRank = sorted.findIndex((p) => p.id === myId) + 1;
+    if (myRank > 0) {
+      $('rank-chip').innerHTML =
+        `${myRank}<sup>${ordinal(myRank)}</sup> <small>/ ${sorted.length}</small>`;
+    }
     $('leaderboard').innerHTML = sorted.slice(0, 8).map((p, i) => `
       <div class="lb-row${p.id === myId ? ' me' : ''}">
         <span>${i + 1}. ${esc(p.n)}${p.bot ? ' 🤖' : ''}</span>

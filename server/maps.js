@@ -18,12 +18,14 @@ export const MAPS = {
     width: 64,
     depth: 64,
     theme: {
-      floor: 0xb8a98c,
-      grid: 0x8f7f63,
-      wall: 0x6b5b45,
-      sky: 0xffc98a,
-      fog: 0xe8b07a,
-      obstacle: 0x8d7a5e,
+      floor: 0xf5d67a,
+      grid: 0xe3bf5f,
+      wall: 0xd99a4e,
+      sky: 0x63c8f0,
+      skyTop: 0x4db5ec,
+      skyBottom: 0xd8f1fc,
+      fog: 0xc6e9f8,
+      obstacle: 0xe0a95c,
     },
     obstacles: [
       // central halfpipe-ish block
@@ -64,12 +66,14 @@ export const MAPS = {
     width: 56,
     depth: 56,
     theme: {
-      floor: 0x14142b,
-      grid: 0x3affd0,
-      wall: 0x241f4d,
-      sky: 0x0b0b1c,
-      fog: 0x1a1440,
-      obstacle: 0x3d2f8f,
+      floor: 0x191936,
+      grid: 0x35ffd5,
+      wall: 0x2c2566,
+      sky: 0x0a0a24,
+      skyTop: 0x070718,
+      skyBottom: 0x2c2158,
+      fog: 0x241d55,
+      obstacle: 0x4a39b8,
     },
     obstacles: [
       // pinwheel of pillars around the middle
@@ -101,12 +105,14 @@ export const MAPS = {
     width: 70,
     depth: 50,
     theme: {
-      floor: 0x565d68,
-      grid: 0x3e444d,
-      wall: 0x2f343c,
-      sky: 0x9db8d8,
-      fog: 0xb7c8de,
-      obstacle: 0x777f8c,
+      floor: 0x9aa6b8,
+      grid: 0x8894a6,
+      wall: 0x5d6675,
+      sky: 0x7fb8e8,
+      skyTop: 0x64a9e4,
+      skyBottom: 0xdcedfb,
+      fog: 0xcfe4f5,
+      obstacle: 0xa8bccf,
     },
     obstacles: [
       // AC units and skylights scattered across the roof

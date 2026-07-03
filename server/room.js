@@ -11,13 +11,16 @@ const SNAPSHOT_EVERY = 2; // ticks -> 15Hz snapshots
 
 export const MAX_PLAYERS = 8;
 const PLAYER_RADIUS = 0.7;
-const ACCEL = 30;
+const ACCEL = 28;
 const BRAKE = 40;
 const MAX_SPEED = 14;
 const BOOST_MAX_SPEED = 19;
 const REVERSE_MAX = 6;
 const FRICTION = 10;
-const TURN_RATE = 3.0;
+const TURN_RATE = 3.2;
+const LATERAL_GRIP = 6.5; // how fast sideways slide decays (lower = driftier)
+const RESTITUTION = 0.4; // wall bounce
+const KNOCKBACK = 16; // explosion impulse at ground zero
 
 const MAX_HP = 100;
 const RESPAWN_DELAY = 3;
@@ -101,7 +104,8 @@ export class Room {
       name,
       bot,
       x: s.x, z: s.z, angle: s.angle,
-      speed: 0,
+      vx: 0, vz: 0,
+      speed: 0, // signed forward speed (derived from velocity; bots read it)
       hp: MAX_HP,
       alive: true,
       respawnAt: 0,
@@ -213,6 +217,7 @@ export class Room {
   respawn(p) {
     const s = this.spawnPoint();
     p.x = s.x; p.z = s.z; p.angle = s.angle;
+    p.vx = 0; p.vz = 0;
     p.speed = 0;
     p.hp = MAX_HP;
     p.alive = true;
@@ -233,41 +238,62 @@ export class Room {
     const inp = p.input;
     const maxSpeed = this.time < p.boostUntil ? BOOST_MAX_SPEED : MAX_SPEED;
 
+    // Decompose velocity into forward/lateral relative to the skater's facing.
+    const fx = Math.cos(p.angle);
+    const fz = Math.sin(p.angle);
+    let fwd = p.vx * fx + p.vz * fz;
+    let lat = -p.vx * fz + p.vz * fx;
+
     if (inp.u && !inp.d) {
-      p.speed += (p.speed < 0 ? BRAKE : ACCEL) * dt;
+      fwd += (fwd < 0 ? BRAKE : ACCEL) * dt;
     } else if (inp.d && !inp.u) {
-      p.speed -= (p.speed > 0 ? BRAKE : ACCEL) * dt;
+      fwd -= (fwd > 0 ? BRAKE : ACCEL) * dt;
     } else {
       // coast toward zero
       const f = FRICTION * dt;
-      if (p.speed > f) p.speed -= f;
-      else if (p.speed < -f) p.speed += f;
-      else p.speed = 0;
+      if (fwd > f) fwd -= f;
+      else if (fwd < -f) fwd += f;
+      else fwd = 0;
     }
-    p.speed = Math.max(-REVERSE_MAX, Math.min(maxSpeed, p.speed));
+    fwd = Math.max(-REVERSE_MAX, Math.min(maxSpeed, fwd));
 
-    // Steering scales with speed a bit, and flips when reversing.
-    if (inp.l !== inp.r && Math.abs(p.speed) > 0.2) {
-      const grip = Math.min(1, 0.35 + Math.abs(p.speed) / 8);
-      const dir = (inp.l ? -1 : 1) * (p.speed < 0 ? -1 : 1);
+    // Skate grip: sideways slide decays quickly but not instantly, so hard
+    // turns at speed carve/drift instead of pivoting on a rail.
+    lat *= Math.exp(-LATERAL_GRIP * dt);
+
+    // Steering: skaters pivot easily at low speed, grip more as they carve.
+    if (inp.l !== inp.r && Math.abs(fwd) > 0.15) {
+      const grip = Math.min(1, 0.45 + Math.abs(fwd) / 9);
+      const dir = (inp.l ? -1 : 1) * (fwd < 0 ? -1 : 1);
       p.angle = wrapAngle(p.angle + dir * TURN_RATE * grip * dt);
     }
 
-    p.x += Math.cos(p.angle) * p.speed * dt;
-    p.z += Math.sin(p.angle) * p.speed * dt;
+    // Recompose along the (possibly rotated) heading — the mismatch between
+    // where momentum points and where the skates point is the drift.
+    const nfx = Math.cos(p.angle);
+    const nfz = Math.sin(p.angle);
+    p.vx = fwd * nfx - lat * nfz;
+    p.vz = fwd * nfz + lat * nfx;
+
+    p.x += p.vx * dt;
+    p.z += p.vz * dt;
+    p.speed = fwd;
 
     this.collideWithWorld(p, PLAYER_RADIUS, true);
   }
 
-  // Push a circular entity out of walls and obstacles. Returns true on hit.
-  collideWithWorld(e, radius, dampen) {
+  // Push a circular entity out of walls and obstacles; entities with velocity
+  // (players) bounce with restitution instead of stopping dead.
+  collideWithWorld(e, radius, bounce) {
     let hit = false;
+    const hasVel = e.vx !== undefined;
+    const rest = bounce && hasVel ? RESTITUTION : 0;
     const hw = this.map.width / 2 - radius;
     const hd = this.map.depth / 2 - radius;
-    if (e.x < -hw) { e.x = -hw; hit = true; }
-    if (e.x > hw) { e.x = hw; hit = true; }
-    if (e.z < -hd) { e.z = -hd; hit = true; }
-    if (e.z > hd) { e.z = hd; hit = true; }
+    if (e.x < -hw) { e.x = -hw; if (rest && e.vx < 0) e.vx = -e.vx * rest; hit = true; }
+    if (e.x > hw) { e.x = hw; if (rest && e.vx > 0) e.vx = -e.vx * rest; hit = true; }
+    if (e.z < -hd) { e.z = -hd; if (rest && e.vz < 0) e.vz = -e.vz * rest; hit = true; }
+    if (e.z > hd) { e.z = hd; if (rest && e.vz > 0) e.vz = -e.vz * rest; hit = true; }
 
     for (const o of this.map.obstacles) {
       const cx = Math.max(o.x - o.w / 2, Math.min(e.x, o.x + o.w / 2));
@@ -277,19 +303,27 @@ export class Room {
       const d2 = dx * dx + dz * dz;
       if (d2 >= radius * radius) continue;
       hit = true;
+      let nx; let nz;
       if (d2 > 1e-9) {
         const d = Math.sqrt(d2);
-        e.x = cx + (dx / d) * radius;
-        e.z = cz + (dz / d) * radius;
+        nx = dx / d; nz = dz / d;
+        e.x = cx + nx * radius;
+        e.z = cz + nz * radius;
       } else {
         // center inside the box: push out along the shallowest axis
         const px = o.w / 2 + radius - Math.abs(e.x - o.x);
         const pz = o.d / 2 + radius - Math.abs(e.z - o.z);
-        if (px < pz) e.x += e.x >= o.x ? px : -px;
-        else e.z += e.z >= o.z ? pz : -pz;
+        if (px < pz) { nx = e.x >= o.x ? 1 : -1; nz = 0; e.x += nx * px; }
+        else { nx = 0; nz = e.z >= o.z ? 1 : -1; e.z += nz * pz; }
+      }
+      if (rest) {
+        const vn = e.vx * nx + e.vz * nz;
+        if (vn < 0) {
+          e.vx -= (1 + rest) * vn * nx;
+          e.vz -= (1 + rest) * vn * nz;
+        }
       }
     }
-    if (hit && dampen) e.speed *= 0.6;
     return hit;
   }
 
@@ -308,7 +342,14 @@ export class Room {
         dx /= d; dz /= d;
         a.x -= dx * push; a.z -= dz * push;
         b.x += dx * push; b.z += dz * push;
-        a.speed *= 0.92; b.speed *= 0.92;
+        // exchange momentum along the contact normal (only while approaching,
+        // so overlapping players don't pump energy into each other)
+        const rel = (b.vx - a.vx) * dx + (b.vz - a.vz) * dz;
+        if (rel < 0) {
+          const imp = -rel * 0.55;
+          a.vx -= dx * imp; a.vz -= dz * imp;
+          b.vx += dx * imp; b.vz += dz * imp;
+        }
       }
     }
   }
@@ -392,6 +433,12 @@ export class Room {
           const r = PLAYER_RADIUS + pr.spec.radius;
           if (dx * dx + dz * dz < r * r) {
             this.damage(t, pr.spec.damage, pr.owner, pr.type);
+            if (t.alive) {
+              // shove the target along the projectile's path
+              const kick = pr.type === 'rocket' ? 9 : 3;
+              t.vx += pr.dx * kick;
+              t.vz += pr.dz * kick;
+            }
             if (pr.spec.splash) this.explode(pr.x, pr.z, pr.spec.splash, pr.owner, pr.type, t.id);
             dead = true;
             break;
@@ -443,11 +490,23 @@ export class Room {
   explode(x, z, splash, ownerId, weaponType, alreadyHitId = null) {
     this.events.push({ e: 'boom', x, z, big: true });
     for (const t of this.players.values()) {
-      if (!t.alive || t.id === ownerId || t.id === alreadyHitId) continue;
+      if (!t.alive) continue;
       const dx = t.x - x;
       const dz = t.z - z;
-      if (dx * dx + dz * dz < splash.radius * splash.radius) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= splash.radius * splash.radius) continue;
+      if (t.id !== ownerId && t.id !== alreadyHitId) {
         this.damage(t, splash.damage, ownerId, weaponType);
+      }
+      if (t.alive) {
+        // radial knockback — hits everyone in range, including the owner
+        // (skilled players can rocket-jump out of trouble)
+        const d = Math.sqrt(d2);
+        const nx = d > 1e-6 ? dx / d : 1;
+        const nz = d > 1e-6 ? dz / d : 0;
+        const falloff = 1 - d / splash.radius;
+        t.vx += nx * KNOCKBACK * falloff;
+        t.vz += nz * KNOCKBACK * falloff;
       }
     }
   }
@@ -473,6 +532,8 @@ export class Room {
         e: 'kill',
         kn: killer ? killer.name : '???',
         vn: victim.name,
+        ki: killer ? killer.id : null,
+        vi: victim.id,
         w: weaponType,
         x: victim.x,
         z: victim.z,
