@@ -28,6 +28,11 @@ const RESULTS_DURATION = 12;
 
 let nextEntityId = 1;
 
+export function sanitizeName(raw) {
+  const name = String(raw || '').replace(/[^\w \-'!.]/g, '').trim().slice(0, 14);
+  return name || `Ninja${Math.floor(Math.random() * 900) + 100}`;
+}
+
 function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;
   while (a < -Math.PI) a += Math.PI * 2;
@@ -113,7 +118,7 @@ export class Room {
     };
   }
 
-  addHuman(ws, name) {
+  addHuman(ws, rawName) {
     if (this.players.size >= MAX_PLAYERS) {
       // Kick a bot to make room for a human.
       const bot = [...this.players.values()].find((p) => p.bot);
@@ -121,7 +126,7 @@ export class Room {
       this.players.delete(bot.id);
       this.events.push({ e: 'leave', n: bot.name });
     }
-    const p = this.makePlayer(name, false);
+    const p = this.makePlayer(sanitizeName(rawName), false);
     this.players.set(p.id, p);
     this.sockets.set(p.id, ws);
     this.events.push({ e: 'join', n: p.name });
@@ -552,7 +557,9 @@ export class Room {
     const msg = JSON.stringify(this.snapshot());
     this.events = [];
     for (const ws of this.sockets.values()) {
-      if (ws.readyState === 1) ws.send(msg);
+      // works for both Node `ws` sockets and Cloudflare Workers WebSockets
+      if (ws.readyState !== undefined && ws.readyState !== 1) continue;
+      try { ws.send(msg); } catch { /* socket closed mid-broadcast */ }
     }
   }
 }

@@ -9,8 +9,29 @@ web-native.
 
 ```bash
 npm install
-npm start          # http://localhost:3000
+npm start          # Node server on http://localhost:3000
 ```
+
+## Deploy to Cloudflare (Workers + Durable Objects)
+
+The same game deploys to Cloudflare's edge, where **each room is a Durable
+Object** — a single-threaded instance that every player's WebSocket routes
+to worldwide. Rooms scale horizontally and idle rooms cost nothing.
+
+```bash
+npm install
+npx wrangler login          # or export CLOUDFLARE_API_TOKEN=...
+npm run cf:dev              # local workerd dev server on :8787
+npm run cf:deploy           # deploy to <name>.workers.dev
+```
+
+The Node server (`server/index.js`) and the Worker (`src/worker.js`) are two
+shells around the same simulation code and speak the same protocol: room
+selection over `POST /api/create|quick|join`, then a WebSocket to
+`/ws/:code`. On Cloudflare, quick-play matchmaking lives in a singleton
+lobby Durable Object that room objects report their occupancy to, and
+idle room objects stop their tick loop so they can hibernate (an alarm
+reaps the room config after an hour of emptiness).
 
 - **Quick Play** — join a public room with players (and bots) worldwide.
 - **Create Room** — pick a map, 3 or 6 minute matches, optional bots, then

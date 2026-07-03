@@ -1,5 +1,8 @@
-// NinjaSkates server: serves the static client and hosts the WebSocket
-// endpoint that all rooms run behind.
+// NinjaSkates Node server: static client + WebSocket rooms in one process.
+// Room selection happens over HTTP (POST /api/create|quick|join) and the
+// WebSocket then connects straight to /ws/:code — the same protocol the
+// Cloudflare Workers deployment (src/worker.js) speaks, so the client is
+// identical for both.
 
 import http from 'http';
 import path from 'path';
@@ -13,9 +16,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
-// Serve three.js straight out of node_modules so the client is fully self-hosted.
-app.use('/vendor', express.static(path.join(__dirname, '..', 'node_modules', 'three', 'build')));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -31,11 +33,6 @@ function newRoomCode() {
     }
     if (!rooms.has(code)) return code;
   }
-}
-
-function sanitizeName(raw) {
-  const name = String(raw || '').replace(/[^\w \-'!.]/g, '').trim().slice(0, 14);
-  return name || `Ninja${Math.floor(Math.random() * 900) + 100}`;
 }
 
 function createRoom({ mapId, duration, isPublic, botCount }) {
@@ -57,14 +54,48 @@ function findQuickRoom() {
   });
 }
 
-function joinRoom(ws, room, name) {
-  const player = room.addHuman(ws, sanitizeName(name));
-  if (!player) {
-    ws.send(JSON.stringify({ t: 'error', msg: 'Room is full.' }));
+// ------------------------------------------------------------ room lookup
+
+app.post('/api/create', (req, res) => {
+  const body = req.body || {};
+  const room = createRoom({
+    mapId: MAPS[body.map] ? body.map : randomMapId(),
+    duration: body.duration === 360 ? 360 : 180,
+    isPublic: false,
+    botCount: Math.max(0, Math.min(6, body.bots | 0)),
+  });
+  res.json({ room: room.code });
+});
+
+app.post('/api/quick', (req, res) => {
+  res.json({ room: findQuickRoom().code });
+});
+
+app.post('/api/join', (req, res) => {
+  const code = String(req.body?.room || '').toUpperCase().trim();
+  if (rooms.has(code)) res.json({ room: code });
+  else res.status(404).json({ error: `Room ${code} not found.` });
+});
+
+// --------------------------------------------------------------- gameplay
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost');
+  const m = url.pathname.match(/^\/ws\/([A-Za-z0-9]+)$/);
+  const room = m ? rooms.get(m[1].toUpperCase()) : null;
+  if (!room) {
+    ws.send(JSON.stringify({ t: 'error', msg: 'Room not found.' }));
+    ws.close();
     return;
   }
-  ws._room = room;
-  ws._playerId = player.id;
+
+  const player = room.addHuman(ws, url.searchParams.get('name'));
+  if (!player) {
+    ws.send(JSON.stringify({ t: 'error', msg: 'Room is full.' }));
+    ws.close();
+    return;
+  }
+
   ws.send(JSON.stringify({
     t: 'joined',
     id: player.id,
@@ -73,58 +104,15 @@ function joinRoom(ws, room, name) {
     duration: room.duration,
     maxPlayers: MAX_PLAYERS,
   }));
-}
 
-wss.on('connection', (ws) => {
   ws.on('message', (data) => {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
-    if (typeof msg !== 'object' || msg === null) return;
-
-    switch (msg.t) {
-      case 'create': {
-        if (ws._room) return;
-        const room = createRoom({
-          mapId: MAPS[msg.map] ? msg.map : randomMapId(),
-          duration: msg.duration === 360 ? 360 : 180,
-          isPublic: false,
-          botCount: Math.max(0, Math.min(6, msg.bots | 0)),
-        });
-        joinRoom(ws, room, msg.name);
-        break;
-      }
-      case 'join': {
-        if (ws._room) return;
-        const code = String(msg.room || '').toUpperCase().trim();
-        const room = rooms.get(code);
-        if (!room) {
-          ws.send(JSON.stringify({ t: 'error', msg: `Room ${code} not found.` }));
-          return;
-        }
-        joinRoom(ws, room, msg.name);
-        break;
-      }
-      case 'quick': {
-        if (ws._room) return;
-        joinRoom(ws, findQuickRoom(), msg.name);
-        break;
-      }
-      case 'input': {
-        if (ws._room) ws._room.setInput(ws._playerId, msg);
-        break;
-      }
-      case 'ping': {
-        ws.send(JSON.stringify({ t: 'pong', ts: msg.ts }));
-        break;
-      }
-      default:
-        break;
-    }
+    if (msg?.t === 'input') room.setInput(player.id, msg);
+    else if (msg?.t === 'ping') ws.send(JSON.stringify({ t: 'pong', ts: msg.ts }));
   });
 
-  ws.on('close', () => {
-    if (ws._room) ws._room.removePlayer(ws._playerId);
-  });
+  ws.on('close', () => room.removePlayer(player.id));
 });
 
 // Reap rooms that have had no human players for a minute (grace period so a

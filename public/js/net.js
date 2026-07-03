@@ -11,10 +11,10 @@ export class Net {
     this.handlers.set(type, fn);
   }
 
-  connect() {
+  connect(path) {
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${proto}://${location.host}`);
+      const ws = new WebSocket(`${proto}://${location.host}${path}`);
       this.ws = ws;
       ws.onopen = () => {
         this._pingTimer = setInterval(() => {

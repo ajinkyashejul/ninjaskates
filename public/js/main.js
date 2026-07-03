@@ -58,14 +58,12 @@ function initMenu() {
   pillGroup('duration-group', 'min', (v) => { chosenMin = v; });
   pillGroup('bots-group', 'bots', (v) => { chosenBots = v; });
 
-  $('btn-quick').addEventListener('click', () => play({ t: 'quick' }));
-  $('btn-create').addEventListener('click', () => play({
-    t: 'create', map: chosenMap, duration: chosenMin * 60, bots: chosenBots,
-  }));
+  $('btn-quick').addEventListener('click', () => play('quick'));
+  $('btn-create').addEventListener('click', () => play('create'));
   $('btn-join').addEventListener('click', () => {
     const code = $('room-input').value.trim().toUpperCase();
     if (code.length < 4) return menuError('Enter the 5-letter room code.');
-    play({ t: 'join', room: code });
+    play('join', code);
   });
 
   // deep link: ?room=CODE jumps straight to the join tab
@@ -83,16 +81,30 @@ function menuError(msg) {
   el.classList.remove('hidden');
 }
 
-async function play(joinMsg) {
+// Room selection happens over HTTP; the WebSocket then connects straight to
+// the chosen room. (On the Cloudflare deployment the room's Durable Object
+// must be picked before the upgrade, so this order is load-bearing.)
+async function play(mode, joinCode) {
   const name = $('name-input').value.trim();
   localStorage.setItem('nj_name', name);
-  joinMsg.name = name;
   try {
-    if (!net.ws || net.ws.readyState !== 1) await net.connect();
+    const body = mode === 'create'
+      ? { map: chosenMap, duration: chosenMin * 60, bots: chosenBots }
+      : mode === 'join' ? { room: joinCode } : {};
+    const res = await fetch(`/api/${mode}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not reach the game server.');
+    }
+    const { room } = await res.json();
+    await net.connect(`/ws/${room}?name=${encodeURIComponent(name)}`);
   } catch (err) {
-    return menuError(err.message);
+    menuError(err.message);
   }
-  net.send(joinMsg);
 }
 
 // ------------------------------------------------------------- net events
