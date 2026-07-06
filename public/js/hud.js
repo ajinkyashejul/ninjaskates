@@ -69,6 +69,18 @@ export class Hud {
     this._bannerTimer = setTimeout(() => b.classList.add('hidden'), 1500);
   }
 
+  goFlash() {
+    this._goFlashing = true;
+    const cd = $('countdown-overlay');
+    $('countdown-num').textContent = 'GO!';
+    cd.classList.remove('hidden');
+    clearTimeout(this._goTimer);
+    this._goTimer = setTimeout(() => {
+      this._goFlashing = false;
+      cd.classList.add('hidden');
+    }, 900);
+  }
+
   smashBanner(text) {
     const b = $('smash-banner');
     b.textContent = text;
@@ -108,8 +120,20 @@ export class Hud {
     if (view.state === 'playing') {
       timer.textContent = `${mm}:${ss}`;
       timer.classList.toggle('low', t <= 30);
+    } else if (view.state === 'starting') {
+      timer.textContent = 'READY';
+      timer.classList.remove('low');
     } else {
       timer.textContent = '0:00';
+    }
+
+    // 3-2-1 countdown before each match
+    const cd = $('countdown-overlay');
+    if (view.state === 'starting') {
+      cd.classList.remove('hidden');
+      $('countdown-num').textContent = Math.max(1, Math.ceil(t));
+    } else if (!this._goFlashing) {
+      cd.classList.add('hidden');
     }
 
     // leaderboard + my rank chip

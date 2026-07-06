@@ -61,8 +61,9 @@ export class Room {
 
     this.time = 0; // simulation clock, seconds
     this.tick = 0;
-    this.state = 'playing';
-    this.matchEndsAt = this.duration;
+    this.state = 'starting'; // 3-2-1-GO countdown, then 'playing'
+    this.playAt = 3;
+    this.matchEndsAt = 0;
     this.resultsEndsAt = 0;
     this.emptyAt = Date.now();
 
@@ -172,11 +173,20 @@ export class Room {
     this.time += DT;
     this.tick++;
 
-    if (this.state === 'playing') {
+    if (this.state === 'starting') {
+      this.ensureBots();
+      // skaters coast to a stop but can't move or fire during the countdown
+      for (const p of this.players.values()) this.updatePlayer(p, DT, true);
+      if (this.time >= this.playAt) {
+        this.state = 'playing';
+        this.matchEndsAt = this.time + this.duration;
+        this.events.push({ e: 'matchStart' });
+      }
+    } else if (this.state === 'playing') {
       this.ensureBots();
       for (const p of this.players.values()) {
         if (p.bot && p.alive) updateBot(this, p, DT);
-        this.updatePlayer(p, DT);
+        this.updatePlayer(p, DT, false);
       }
       this.resolvePlayerCollisions();
       for (const p of this.players.values()) this.handleFire(p);
@@ -204,14 +214,13 @@ export class Room {
   }
 
   startMatch() {
-    this.state = 'playing';
-    this.matchEndsAt = this.time + this.duration;
+    this.state = 'starting';
+    this.playAt = this.time + 3;
     for (const c of this.crates) { c.active = true; c.respawnAt = 0; }
     for (const p of this.players.values()) {
       p.kills = 0; p.deaths = 0;
       this.respawn(p);
     }
-    this.events.push({ e: 'matchStart' });
   }
 
   respawn(p) {
@@ -229,13 +238,13 @@ export class Room {
 
   // -------------------------------------------------------------- movement
 
-  updatePlayer(p, dt) {
+  updatePlayer(p, dt, frozen = false) {
     if (!p.alive) {
       if (this.time >= p.respawnAt) this.respawn(p);
       return;
     }
 
-    const inp = p.input;
+    const inp = frozen ? { u: false, d: false, l: false, r: false } : p.input;
     const maxSpeed = this.time < p.boostUntil ? BOOST_MAX_SPEED : MAX_SPEED;
 
     // Decompose velocity into forward/lateral relative to the skater's facing.
@@ -288,12 +297,31 @@ export class Room {
     let hit = false;
     const hasVel = e.vx !== undefined;
     const rest = bounce && hasVel ? RESTITUTION : 0;
-    const hw = this.map.width / 2 - radius;
-    const hd = this.map.depth / 2 - radius;
-    if (e.x < -hw) { e.x = -hw; if (rest && e.vx < 0) e.vx = -e.vx * rest; hit = true; }
-    if (e.x > hw) { e.x = hw; if (rest && e.vx > 0) e.vx = -e.vx * rest; hit = true; }
-    if (e.z < -hd) { e.z = -hd; if (rest && e.vz < 0) e.vz = -e.vz * rest; hit = true; }
-    if (e.z > hd) { e.z = hd; if (rest && e.vz > 0) e.vz = -e.vz * rest; hit = true; }
+    if (this.map.shape === 'circle') {
+      const R = this.map.radius - radius;
+      const d = Math.hypot(e.x, e.z);
+      if (d > R) {
+        const nx = -e.x / d; // inward normal
+        const nz = -e.z / d;
+        e.x = -nx * R;
+        e.z = -nz * R;
+        hit = true;
+        if (rest) {
+          const vn = e.vx * nx + e.vz * nz;
+          if (vn < 0) {
+            e.vx -= (1 + rest) * vn * nx;
+            e.vz -= (1 + rest) * vn * nz;
+          }
+        }
+      }
+    } else {
+      const hw = this.map.width / 2 - radius;
+      const hd = this.map.depth / 2 - radius;
+      if (e.x < -hw) { e.x = -hw; if (rest && e.vx < 0) e.vx = -e.vx * rest; hit = true; }
+      if (e.x > hw) { e.x = hw; if (rest && e.vx > 0) e.vx = -e.vx * rest; hit = true; }
+      if (e.z < -hd) { e.z = -hd; if (rest && e.vz < 0) e.vz = -e.vz * rest; hit = true; }
+      if (e.z > hd) { e.z = hd; if (rest && e.vz > 0) e.vz = -e.vz * rest; hit = true; }
+    }
 
     for (const o of this.map.obstacles) {
       const cx = Math.max(o.x - o.w / 2, Math.min(e.x, o.x + o.w / 2));
@@ -451,9 +479,13 @@ export class Room {
   }
 
   projectileHitsWorld(pr) {
-    const hw = this.map.width / 2;
-    const hd = this.map.depth / 2;
-    if (pr.x < -hw || pr.x > hw || pr.z < -hd || pr.z > hd) return true;
+    if (this.map.shape === 'circle') {
+      if (Math.hypot(pr.x, pr.z) > this.map.radius - pr.spec.radius) return true;
+    } else {
+      const hw = this.map.width / 2;
+      const hd = this.map.depth / 2;
+      if (pr.x < -hw || pr.x > hw || pr.z < -hd || pr.z > hd) return true;
+    }
     for (const o of this.map.obstacles) {
       if (
         pr.x > o.x - o.w / 2 - pr.spec.radius && pr.x < o.x + o.w / 2 + pr.spec.radius &&
@@ -584,10 +616,12 @@ export class Room {
 
   snapshot() {
     const r2 = (v) => Math.round(v * 100) / 100;
+    const deadline = this.state === 'starting' ? this.playAt
+      : this.state === 'playing' ? this.matchEndsAt : this.resultsEndsAt;
     return {
       t: 'snap',
       st: this.state,
-      tl: r2(Math.max(0, (this.state === 'playing' ? this.matchEndsAt : this.resultsEndsAt) - this.time)),
+      tl: r2(Math.max(0, deadline - this.time)),
       p: [...this.players.values()].map((p) => ({
         id: p.id,
         n: p.name,

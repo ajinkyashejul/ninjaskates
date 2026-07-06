@@ -4,6 +4,7 @@
 import { Net } from './net.js';
 import { Input } from './input.js';
 import { Renderer } from './render.js';
+import { MenuScene } from './menu-scene.js';
 import { Hud } from './hud.js';
 import { sfx } from './sfx.js';
 
@@ -124,6 +125,8 @@ net.on('joined', (msg) => {
   myId = msg.id;
   inGame = true;
   snapshots = [];
+  menuScene?.dispose();
+  menuScene = null;
   renderer = new Renderer($('game'), msg.map);
   window.__renderer = renderer; // debug/QA handle
   $('menu').classList.add('hidden');
@@ -180,7 +183,8 @@ function processEvents(events) {
         sfx.countdownEnd();
         break;
       case 'matchStart':
-        hud.toast('New match — go!');
+        hud.goFlash();
+        sfx.countdownEnd();
         break;
       case 'join':
         hud.toast(`${ev.n} rolled in`);
@@ -266,3 +270,10 @@ function loop() {
 }
 
 initMenu();
+
+// live 3D character preview beside the menu form
+let menuScene = null;
+try {
+  const pc = $('preview-canvas');
+  if (pc && pc.clientWidth > 0) menuScene = new MenuScene(pc);
+} catch { /* preview is decorative — the game works without it */ }

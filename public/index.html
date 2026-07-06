@@ -12,6 +12,7 @@
 
   <!-- ============================== MENU ============================== -->
   <div id="menu">
+    <div class="menu-layout">
     <div class="menu-card">
       <h1 class="logo">Ninja<span>Skates</span></h1>
       <p class="tagline">Skate. Snatch. Smash.</p>
@@ -68,6 +69,10 @@
       <p id="menu-error" class="error hidden"></p>
       <p class="controls-hint">WASD / arrows to skate · Space or click to attack</p>
     </div>
+    <div class="menu-preview">
+      <canvas id="preview-canvas"></canvas>
+    </div>
+    </div>
   </div>
 
   <!-- =============================== HUD =============================== -->
@@ -98,6 +103,8 @@
       <div id="weapon-slot"><span id="weapon-name">No weapon</span><span id="weapon-ammo"></span></div>
       <div id="net-stats"><span id="ping">--ms</span> · <span id="fps">60fps</span></div>
     </div>
+
+    <div id="countdown-overlay" class="hidden"><span id="countdown-num">3</span></div>
 
     <div id="respawn-overlay" class="center-overlay hidden">
       <h2>SMASHED!</h2>

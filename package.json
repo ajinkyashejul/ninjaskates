@@ -12,6 +12,7 @@
     "cf:deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@fontsource/baloo-2": "^5.2.7",
     "express": "^4.19.2",
     "three": "^0.160.0",
     "ws": "^8.17.0"

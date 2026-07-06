@@ -66,6 +66,11 @@ export function updateBot(room, bot, dt) {
       if (crate) {
         bot.targetX = crate.x;
         bot.targetZ = crate.z;
+      } else if (room.map.shape === 'circle') {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.sqrt(Math.random()) * room.map.radius * 0.8;
+        bot.targetX = Math.cos(a) * r;
+        bot.targetZ = Math.sin(a) * r;
       } else {
         bot.targetX = (Math.random() - 0.5) * room.map.width * 0.7;
         bot.targetZ = (Math.random() - 0.5) * room.map.depth * 0.7;
