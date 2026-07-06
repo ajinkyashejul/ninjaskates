@@ -125,6 +125,7 @@ net.on('joined', (msg) => {
   inGame = true;
   snapshots = [];
   renderer = new Renderer($('game'), msg.map);
+  window.__renderer = renderer; // debug/QA handle
   $('menu').classList.add('hidden');
   hud.show(msg.room);
   hud.toast(`Welcome to ${msg.map.name}! Grab a crate to arm up.`);

@@ -52,7 +52,7 @@ Touch devices get an on-screen joystick and fire button.
   you after 3 seconds with brief spawn protection.
 - When the timer hits zero, final standings are shown and a new match
   starts automatically. Players can join mid-match.
-- Three maps: **Sunset Skatepark**, **Neon Rink**, **Rooftop Rumble**.
+- Three maps: **Sunny Island**, **Neon Rink**, **Rooftop Rumble**.
 
 ## Architecture
 
