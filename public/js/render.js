@@ -2,7 +2,14 @@
 // interpolated view it's handed each frame and layers on purely-visual feel:
 // skating stride, lean, skid trails, dust, explosion effects, island scenery.
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from 'three';
+import {
+  EffectComposer, RenderPass, EffectPass,
+  BloomEffect, VignetteEffect, SMAAEffect,
+  ToneMappingEffect, ToneMappingMode, HueSaturationEffect,
+} from 'postprocessing';
+import { RGBELoader } from '/vendor/loaders/RGBELoader.js';
+import { instance as propInstance, hasModel } from './assets.js';
 
 const PLAYER_COLORS = [
   0xff4d5a, 0x2ec8a6, 0xffb42e, 0x7a6bff,
@@ -649,12 +656,14 @@ function buildCrateStack(o, mat) {
 export class Renderer {
   constructor(canvas, map) {
     this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    // antialiasing comes from the SMAA post effect; ACES tone mapping runs
+    // in the post chain too (falls back to renderer-side if compositing fails)
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(map.theme.sky);
@@ -664,8 +673,8 @@ export class Renderer {
     this.camera.position.set(0, 30, 30);
     this.fov = 56;
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a97a8, 1.0));
-    const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8a97a8, 0.5));
+    const sun = new THREE.DirectionalLight(0xfff2dd, 1.5);
     sun.position.set(35, 55, 22);
     sun.castShadow = true;
     const range = Math.max(map.width, map.depth) * 0.75;
@@ -678,6 +687,39 @@ export class Renderer {
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0005;
     this.scene.add(sun);
+
+    // image-based lighting from a Poly Haven HDRI — richer materials for free
+    new RGBELoader().load(
+      map.style === 'neon' ? '/assets/env/night.hdr' : '/assets/env/sky.hdr',
+      (tex) => {
+        tex.mapping = THREE.EquirectangularReflectionMapping;
+        this.scene.environment = tex;
+        this.scene.environmentIntensity = 0.55;
+      },
+    );
+
+    // post chain: SMAA + bloom + ACES + vignette in one merged pass
+    try {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      const neon = map.style === 'neon';
+      this.composer.addPass(new EffectPass(
+        this.camera,
+        new SMAAEffect(),
+        new BloomEffect({
+          mipmapBlur: true,
+          luminanceThreshold: neon ? 0.32 : 1.05,
+          intensity: neon ? 1.25 : 0.22,
+        }),
+        new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
+        new HueSaturationEffect({ saturation: 0.22 }),
+        new VignetteEffect({ offset: 0.28, darkness: 0.42 }),
+      ));
+    } catch (err) {
+      console.warn('postprocessing unavailable, falling back', err);
+      this.composer = null;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    }
 
     this._mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, ...extra });
     this._buildSky(map);
@@ -698,6 +740,7 @@ export class Renderer {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
+    this.composer?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -806,17 +849,20 @@ export class Renderer {
     foamEdge.position.y = -0.04;
     this.scene.add(foamEdge);
 
-    // 3D grass tufts sprinkled over the painted lawns
+    // 3D grass plants sprinkled over the painted lawns
     for (const zone of map.paint?.grass || []) {
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2 + zone.x;
         const rr = zone.r * (0.35 + ((i * 53) % 10) / 18);
-        const tuft = new THREE.Mesh(
+        const plant = propInstance(i % 2 ? 'grassPlant' : 'grassPatch', { footprint: 0.9 });
+        const tuft = plant ?? new THREE.Mesh(
           new THREE.ConeGeometry(0.13, 0.45, 5),
           mat(theme.leaf ?? 0x3fae4e),
         );
-        tuft.position.set(zone.x + Math.cos(a) * rr, 0.22, zone.z + Math.sin(a) * rr);
-        tuft.castShadow = true;
+        tuft.position.x = zone.x + Math.cos(a) * rr;
+        tuft.position.z = zone.z + Math.sin(a) * rr;
+        if (!plant) { tuft.position.y = 0.22; tuft.castShadow = true; }
+        tuft.rotation.y = i * 1.3;
         this.scene.add(tuft);
       }
     }
@@ -881,10 +927,19 @@ export class Renderer {
           this.scene.add(tuft);
         }
       } else if (dec.kind === 'searock') {
-        const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(dec.s, 0), rockMat);
-        rock.position.set(dec.x, dec.s * 0.22, dec.z);
-        rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
-        this.scene.add(rock);
+        const kRock = propInstance('rockSandB', { footprint: dec.s * 2.2 });
+        if (kRock) {
+          kRock.position.x = dec.x;
+          kRock.position.z = dec.z;
+          kRock.position.y -= dec.s * 0.15; // toes in the water
+          kRock.rotation.y = (dec.x + dec.z) % 6;
+          this.scene.add(kRock);
+        } else {
+          const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(dec.s, 0), rockMat);
+          rock.position.set(dec.x, dec.s * 0.22, dec.z);
+          rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
+          this.scene.add(rock);
+        }
       } else if (dec.kind === 'toriiTop') {
         const torii = buildToriiTop(dec, mat);
         torii.traverse((m) => { if (m.isMesh) m.castShadow = true; });
@@ -894,7 +949,28 @@ export class Renderer {
         bush.traverse((m) => { if (m.isMesh) m.castShadow = true; });
         this.scene.add(bush);
       } else if (dec.kind === 'boat') {
-        this.scene.add(buildBoat(dec, mat));
+        const kBoat = propInstance('boat', { footprint: 3.4 });
+        if (kBoat) {
+          kBoat.position.x = dec.x;
+          kBoat.position.z = dec.z;
+          kBoat.position.y -= 0.18;
+          kBoat.rotation.y = dec.angle ?? 0;
+          this.scene.add(kBoat);
+        } else {
+          this.scene.add(buildBoat(dec, mat));
+        }
+      } else if (dec.kind === 'dock') {
+        const kDock = propInstance('dock', { footprint: 8.5 });
+        if (kDock) {
+          const a = dec.angle ?? 0;
+          kDock.position.x = Math.cos(a) * (R + 3.4);
+          kDock.position.z = Math.sin(a) * (R + 3.4);
+          kDock.position.y -= 0.15;
+          kDock.rotation.y = -a;
+          this.scene.add(kDock);
+        } else {
+          this.scene.add(buildDock(R, dec.angle ?? 0, mat, theme));
+        }
       } else if (dec.kind === 'umbrella') {
         this.scene.add(buildUmbrella(dec, mat));
       } else if (dec.kind === 'ball') {
@@ -903,8 +979,6 @@ export class Renderer {
         ball.rotation.y = Math.random() * 3;
         ball.castShadow = true;
         this.scene.add(ball);
-      } else if (dec.kind === 'dock') {
-        this.scene.add(buildDock(R, dec.angle ?? 0, mat, theme));
       }
     }
 
@@ -972,17 +1046,61 @@ export class Renderer {
         mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), mat(theme.grass ?? 0x82d763));
         mesh.scale.set(o.w / 2 + 0.6, o.h, o.d / 2 + 0.6);
         mesh.position.set(o.x, 0, o.z);
+        // a flag planted on the central knoll as a landmark
+        const flag = propInstance('flag', { height: 5.4 });
+        if (flag && o.x === 0 && o.z === 0) {
+          flag.position.x = o.x + 0.5;
+          flag.position.z = o.z + 0.5;
+          flag.position.y += o.h * 0.9;
+          this.scene.add(flag);
+        }
         break;
       }
-      case 'palm':
-        mesh = buildPalm(o, theme, mat);
+      case 'palm': {
+        const variant = (Math.abs(o.x * 7 + o.z * 13) | 0) % 2 ? 'palm' : 'palmBend';
+        mesh = propInstance(variant, { height: o.h + 1.8 });
+        if (mesh) {
+          mesh.position.x = o.x;
+          mesh.position.z = o.z;
+          mesh.rotation.y = (o.x * 31 + o.z * 17) % 6;
+        } else {
+          mesh = buildPalm(o, theme, mat);
+        }
         break;
-      case 'rock':
-        mesh = buildRockCluster(o.x, o.z, Math.max(o.w, o.d), o.h, mat, theme.rock ?? 0xb7af9f);
+      }
+      case 'rock': {
+        const variant = (Math.abs(o.x * 3 + o.z * 5) | 0) % 2 ? 'rockSandA' : 'rockSandB';
+        mesh = propInstance(variant, { height: o.h + 0.6 });
+        if (mesh) {
+          mesh.position.x = o.x;
+          mesh.position.z = o.z;
+          mesh.rotation.y = (o.x * 13 + o.z * 7) % 6;
+        } else {
+          mesh = buildRockCluster(o.x, o.z, Math.max(o.w, o.d), o.h, mat, theme.rock ?? 0xb7af9f);
+        }
         break;
-      case 'crates':
-        mesh = buildCrateStack(o, mat);
+      }
+      case 'crates': {
+        if (hasModel('crate')) {
+          mesh = new THREE.Group();
+          const c1 = propInstance('crate', { footprint: 1.35 });
+          c1.position.set(-0.55, 0, 0.3);
+          c1.rotation.y = 0.1;
+          const c2 = propInstance('barrel', { footprint: 1.0 });
+          c2.position.set(0.6, 0, -0.4);
+          const c3 = propInstance('chest', { footprint: 1.1 });
+          c3.position.set(0.1, 0, 0.55);
+          c3.rotation.y = -0.5;
+          const c4 = propInstance('crate', { footprint: 1.1 });
+          c4.position.set(-0.4, 1.05, 0.2);
+          c4.rotation.y = 0.5;
+          mesh.add(c1, c2, c3, c4);
+          mesh.position.set(o.x, 0, o.z);
+        } else {
+          mesh = buildCrateStack(o, mat);
+        }
         break;
+      }
       case 'pillar': {
         mesh = new THREE.Group();
         const col = new THREE.Mesh(
@@ -1000,9 +1118,21 @@ export class Renderer {
         mesh.position.set(o.x, 0, o.z);
         break;
       }
-      case 'hut':
-        mesh = buildHut(o, mat, theme);
+      case 'hut': {
+        if (hasModel('hut')) {
+          mesh = new THREE.Group();
+          const base = propInstance('hut', { footprint: o.w + 1 });
+          const roof = propInstance('hutRoof', { footprint: o.w + 1 });
+          const baseBox = new THREE.Box3().setFromObject(base);
+          roof.position.y = baseBox.max.y - 0.08;
+          mesh.add(base, roof);
+          mesh.position.set(o.x, 0, o.z);
+          mesh.rotation.y = (o.x * 3 + o.z) % 6;
+        } else {
+          mesh = buildHut(o, mat, theme);
+        }
         break;
+      }
       default:
         mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.d), mat(theme.obstacle));
         mesh.position.set(o.x, o.h / 2, o.z);
@@ -1413,6 +1543,7 @@ export class Renderer {
       }
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }

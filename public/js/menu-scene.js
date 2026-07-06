@@ -1,7 +1,7 @@
 // Live 3D character preview on the menu — your skater idling on a sunny
 // beach disc, like Smash Karts' garage view.
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from 'three';
 import { buildSkater } from './render.js';
 
 export class MenuScene {
@@ -10,7 +10,7 @@ export class MenuScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
     this.scene = new THREE.Scene();

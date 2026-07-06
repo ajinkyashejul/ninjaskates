@@ -7,6 +7,9 @@ import { Renderer } from './render.js';
 import { MenuScene } from './menu-scene.js';
 import { Hud } from './hud.js';
 import { sfx } from './sfx.js';
+import { preloadModels } from './assets.js';
+
+preloadModels(); // fetch glTF props in the background while the menu shows
 
 const $ = (id) => document.getElementById(id);
 
@@ -121,12 +124,13 @@ net.on('close', () => {
   setTimeout(() => location.reload(), 2500);
 });
 
-net.on('joined', (msg) => {
+net.on('joined', async (msg) => {
   myId = msg.id;
   inGame = true;
   snapshots = [];
   menuScene?.dispose();
   menuScene = null;
+  await preloadModels(); // usually already done while the menu was up
   renderer = new Renderer($('game'), msg.map);
   window.__renderer = renderer; // debug/QA handle
   $('menu').classList.add('hidden');
