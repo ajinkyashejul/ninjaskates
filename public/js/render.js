@@ -32,8 +32,13 @@ function gridTexture(fill, line) {
   return tex;
 }
 
-function islandTexture(theme) {
+// Paint the island floor like a real level: sand base, wobbly grass lawns,
+// sandy paths, a pond, wet sand near the shore, foam, starfish.
+// World coords map to canvas as px = (x+beachR)/(2*beachR)*S (same for z/py).
+function islandTexture(theme, beachR, playR, paint = {}) {
   const S = 1024;
+  const k = S / (2 * beachR); // world units -> px
+  const px = (w) => (w + beachR) * k;
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const g = c.getContext('2d');
@@ -54,17 +59,85 @@ function islandTexture(theme) {
     g.arc(Math.random() * S, Math.random() * S, 1 + Math.random() * 2, 0, 7);
     g.fill();
   }
-  // subtle wave ripples left by the tide
-  g.strokeStyle = 'rgba(210, 170, 100, 0.18)';
-  g.lineWidth = 3;
-  for (let i = 0; i < 40; i++) {
-    const x = Math.random() * S;
-    const y = Math.random() * S;
+
+  // wobbly grass lawns
+  const grassDark = 'rgba(80, 160, 60, 1)';
+  for (const zone of paint.grass || []) {
+    const cx = px(zone.x);
+    const cy = px(zone.z);
+    const r = zone.r * k;
+    g.fillStyle = hex(theme.grass);
     g.beginPath();
-    g.arc(x, y, 20 + Math.random() * 40, Math.random() * 3, Math.random() * 3 + 1.2);
-    g.stroke();
+    g.arc(cx, cy, r * 0.72, 0, 7);
+    g.fill();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const rr = r * (0.55 + ((i * 37) % 10) / 28);
+      g.beginPath();
+      g.arc(cx + Math.cos(a) * rr * 0.62, cy + Math.sin(a) * rr * 0.62, r * 0.38, 0, 7);
+      g.fill();
+    }
+    // darker grass speckles + flowers
+    for (let i = 0; i < 120; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.sqrt(Math.random()) * r * 0.85;
+      g.fillStyle = grassDark;
+      g.globalAlpha = 0.25;
+      g.beginPath();
+      g.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 1.5 + Math.random() * 2.5, 0, 7);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    const flowerCols = ['#ffffff', '#ffd84d', '#ff8aa0'];
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const rr = Math.sqrt(Math.random()) * r * 0.8;
+      g.fillStyle = flowerCols[i % 3];
+      g.beginPath();
+      g.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, 2.4, 0, 7);
+      g.fill();
+    }
   }
-  // foam ring around the circular shore (the floor mesh is a disc)
+
+  // sandy paths carved through the lawn, crossing at the middle
+  g.strokeStyle = hex(theme.floor);
+  g.lineCap = 'round';
+  g.lineWidth = 44;
+  g.beginPath();
+  g.moveTo(px(-24), px(-4));
+  g.quadraticCurveTo(px(0), px(4), px(24), px(-2));
+  g.stroke();
+  g.beginPath();
+  g.moveTo(px(-3), px(-24));
+  g.quadraticCurveTo(px(3), px(0), px(-2), px(24));
+  g.stroke();
+
+  // pond with pale shore ring and highlights
+  if (paint.pond) {
+    const cx = px(paint.pond.x);
+    const cy = px(paint.pond.z);
+    const r = paint.pond.r * k;
+    g.fillStyle = 'rgba(255, 250, 230, 0.85)';
+    g.beginPath(); g.arc(cx, cy, r * 1.12, 0, 7); g.fill();
+    g.fillStyle = hex(theme.water);
+    g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill();
+    g.fillStyle = hex(theme.waterDeep);
+    g.beginPath(); g.arc(cx + r * 0.1, cy + r * 0.1, r * 0.55, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.5)';
+    g.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.arc(cx - r * 0.2, cy - r * 0.15, r * (0.3 + i * 0.2), 0.6, 2.2);
+      g.stroke();
+    }
+  }
+
+  // wet sand near the waterline, then foam at the very edge
+  g.strokeStyle = 'rgba(180, 140, 85, 0.3)';
+  g.lineWidth = 40;
+  g.beginPath();
+  g.arc(S / 2, S / 2, playR * k + 26, 0, 7);
+  g.stroke();
   g.strokeStyle = 'rgba(255,255,255,0.55)';
   g.lineWidth = 22;
   g.beginPath();
@@ -76,21 +149,21 @@ function islandTexture(theme) {
   g.arc(S / 2, S / 2, S / 2 - 38, 0, 7);
   g.stroke();
 
-  // starfish (kept away from the shoreline)
+  // starfish on the open sand (between the lawns and the shore)
   const starColors = ['#ff8aa0', '#c77bff', '#5bc8ff', '#ffb45e'];
   for (let i = 0; i < 8; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const rr = Math.random() * S * 0.36;
+    const a = (i / 8) * Math.PI * 2 + 0.4;
+    const rr = S * (0.3 + (i % 3) * 0.05);
     const x = S / 2 + Math.cos(a) * rr;
     const y = S / 2 + Math.sin(a) * rr;
     const r = 10 + Math.random() * 9;
     const rot = Math.random() * Math.PI;
     g.fillStyle = starColors[i % starColors.length];
     g.beginPath();
-    for (let k = 0; k < 10; k++) {
-      const rr = k % 2 === 0 ? r : r * 0.45;
-      const a = rot + (k / 10) * Math.PI * 2;
-      g[k === 0 ? 'moveTo' : 'lineTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    for (let j = 0; j < 10; j++) {
+      const jr = j % 2 === 0 ? r : r * 0.45;
+      const ja = rot + (j / 10) * Math.PI * 2;
+      g[j === 0 ? 'moveTo' : 'lineTo'](x + Math.cos(ja) * jr, y + Math.sin(ja) * jr);
     }
     g.closePath();
     g.fill();
@@ -341,6 +414,8 @@ export function buildSkater(color) {
   shield.position.y = 1.0;
   outer.add(shield);
 
+  outer.scale.setScalar(1.14); // a touch larger-than-life for screen presence
+
   outer.userData = {
     body, legL, legR, armL, armR, head, shield, torso,
     phase: 0, lastX: null, lastZ: null, lastA: null, roll: 0,
@@ -459,6 +534,88 @@ function buildDock(R, angle, mat, theme) {
   }
   g.position.set(Math.cos(angle) * R, 0, Math.sin(angle) * R);
   g.rotation.y = -angle;
+  return g;
+}
+
+const TORII_RED = 0xe23b30;
+
+// Beams of a torii gate; the two pillars are solid obstacles, so you skate
+// between them under the beams.
+function buildToriiTop(dec, mat) {
+  const g = new THREE.Group();
+  const red = mat(TORII_RED);
+  const dark = mat(0x2a2a33);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.5, 0.7), red);
+  top.position.y = 3.7;
+  top.rotation.z = 0; // gentle upturn at the ends via caps instead
+  g.add(top);
+  for (const side of [-1, 1]) {
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.62, 0.8), dark);
+    cap.position.set(side * 3.2, 3.78, 0);
+    g.add(cap);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.34, 0.5), red);
+  beam.position.y = 2.95;
+  g.add(beam);
+  const strut = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.75, 0.3), red);
+  strut.position.y = 3.3;
+  g.add(strut);
+  g.position.set(dec.x, 0, dec.z);
+  g.rotation.y = dec.angle ?? 0;
+  return g;
+}
+
+function buildHut(o, mat, theme) {
+  const g = new THREE.Group();
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(o.w - 0.4, o.h - 0.6, o.d - 0.4), mat(0xead9b0));
+  walls.position.y = (o.h - 0.6) / 2;
+  g.add(walls);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(o.w * 0.85, 1.5, 4), mat(0xc96f3a));
+  roof.position.y = o.h - 0.6 + 0.72;
+  roof.rotation.y = Math.PI / 4;
+  g.add(roof);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.3, 0.9), mat(0x8a5a33));
+  door.position.set((o.w - 0.4) / 2, 0.65, 0);
+  g.add(door);
+  const window1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.1), mat(0x9fdcf5));
+  window1.position.set(0.4, 1.2, (o.d - 0.4) / 2);
+  g.add(window1);
+  g.position.set(o.x, 0, o.z);
+  return g;
+}
+
+function buildBush(dec, mat, theme) {
+  const g = new THREE.Group();
+  const m = mat(theme.leaf ?? 0x3fae4e);
+  for (const [ox, oy, oz, r] of [[0, 0.4, 0, 0.62], [0.45, 0.3, 0.2, 0.45], [-0.35, 0.32, -0.25, 0.5]]) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 9, 7), m);
+    b.position.set(ox, oy, oz);
+    b.scale.y = 0.85;
+    g.add(b);
+  }
+  g.scale.setScalar(dec.s / 0.6);
+  g.position.set(dec.x, 0, dec.z);
+  return g;
+}
+
+function buildBoat(dec, mat) {
+  const g = new THREE.Group();
+  const hullMat = mat(0xa5643a);
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.7, 3.4, 8), hullMat);
+  hull.rotation.z = Math.PI / 2;
+  hull.scale.z = 0.55;
+  hull.position.y = 0.15;
+  g.add(hull);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.1, 6, 12), mat(0x7c4a28));
+  rim.scale.set(1.85, 0.6, 1);
+  rim.rotation.x = -Math.PI / 2;
+  rim.position.y = 0.55;
+  g.add(rim);
+  const bench = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 1.0), mat(0xc98d5a));
+  bench.position.y = 0.35;
+  g.add(bench);
+  g.position.set(dec.x, -0.1, dec.z);
+  g.rotation.y = dec.angle ?? 0;
   return g;
 }
 
@@ -613,14 +770,45 @@ export class Renderer {
     const mat = this._mat;
     const beachR = R + 3.5;
 
-    // circular sandy island with painted foam edge + starfish
+    // circular sandy island painted with lawns, paths, a pond and foam
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(beachR, 64),
-      new THREE.MeshStandardMaterial({ map: islandTexture(theme) }),
+      new THREE.MeshStandardMaterial({ map: islandTexture(theme, beachR, R, map.paint) }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
+
+    // shallow turquoise gradient where the beach meets the sea
+    const shallows = new THREE.Mesh(
+      new THREE.RingGeometry(beachR - 0.5, beachR + 5.5, 64),
+      new THREE.MeshBasicMaterial({ color: 0x7fe3f2, transparent: true, opacity: 0.55 }),
+    );
+    shallows.rotation.x = -Math.PI / 2;
+    shallows.position.y = -0.06;
+    this.scene.add(shallows);
+    const foamEdge = new THREE.Mesh(
+      new THREE.RingGeometry(beachR - 0.3, beachR + 0.55, 64),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }),
+    );
+    foamEdge.rotation.x = -Math.PI / 2;
+    foamEdge.position.y = -0.04;
+    this.scene.add(foamEdge);
+
+    // 3D grass tufts sprinkled over the painted lawns
+    for (const zone of map.paint?.grass || []) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + zone.x;
+        const rr = zone.r * (0.35 + ((i * 53) % 10) / 18);
+        const tuft = new THREE.Mesh(
+          new THREE.ConeGeometry(0.13, 0.45, 5),
+          mat(theme.leaf ?? 0x3fae4e),
+        );
+        tuft.position.set(zone.x + Math.cos(a) * rr, 0.22, zone.z + Math.sin(a) * rr);
+        tuft.castShadow = true;
+        this.scene.add(tuft);
+      }
+    }
 
     // animated ocean all around
     const waterTex = waterTexture(theme.water, theme.waterDeep);
@@ -686,6 +874,16 @@ export class Renderer {
         rock.position.set(dec.x, dec.s * 0.22, dec.z);
         rock.rotation.set(Math.random() * 3, Math.random() * 3, 0);
         this.scene.add(rock);
+      } else if (dec.kind === 'toriiTop') {
+        const torii = buildToriiTop(dec, mat);
+        torii.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+        this.scene.add(torii);
+      } else if (dec.kind === 'bush') {
+        const bush = buildBush(dec, mat, theme);
+        bush.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+        this.scene.add(bush);
+      } else if (dec.kind === 'boat') {
+        this.scene.add(buildBoat(dec, mat));
       } else if (dec.kind === 'umbrella') {
         this.scene.add(buildUmbrella(dec, mat));
       } else if (dec.kind === 'ball') {
@@ -774,6 +972,26 @@ export class Renderer {
       case 'crates':
         mesh = buildCrateStack(o, mat);
         break;
+      case 'pillar': {
+        mesh = new THREE.Group();
+        const col = new THREE.Mesh(
+          new THREE.CylinderGeometry(o.w * 0.5, o.w * 0.58, o.h, 10),
+          mat(TORII_RED),
+        );
+        col.position.y = o.h / 2;
+        mesh.add(col);
+        const base = new THREE.Mesh(
+          new THREE.CylinderGeometry(o.w * 0.66, o.w * 0.72, 0.3, 10),
+          mat(0x2a2a33),
+        );
+        base.position.y = 0.15;
+        mesh.add(base);
+        mesh.position.set(o.x, 0, o.z);
+        break;
+      }
+      case 'hut':
+        mesh = buildHut(o, mat, theme);
+        break;
       default:
         mesh = new THREE.Mesh(new THREE.BoxGeometry(o.w, o.h, o.d), mat(theme.obstacle));
         mesh.position.set(o.x, o.h / 2, o.z);
@@ -860,6 +1078,12 @@ export class Renderer {
     mesh.material.transparent = true;
     this.scene.add(mesh);
     this.effects.push({ mesh, kind, age: 0, life, ...extra });
+  }
+
+  shake(mag = 0.35, dur = 0.3) {
+    this.shakeMag = mag;
+    this.shakeDur = dur;
+    this.shakeTime = dur;
   }
 
   spawnExplosion(x, z, big) {
@@ -1085,14 +1309,22 @@ export class Renderer {
     // looking slightly ahead of the skater like Smash Karts does.
     const me = view.players.find((p) => p.id === myId);
     if (me && !window.__freezeCam) {
-      const back = 10.5;
+      const back = 9.6;
       const target = new THREE.Vector3(
         me.x - Math.cos(me.a) * back,
-        7.8,
+        7.0,
         me.z - Math.sin(me.a) * back,
       );
       this.camera.position.lerp(target, Math.min(1, dt * 5));
-      this.camera.lookAt(me.x + Math.cos(me.a) * 2.5, 0.9, me.z + Math.sin(me.a) * 2.5);
+      // impact shake
+      if (this.shakeTime > 0) {
+        this.shakeTime -= dt;
+        const m = this.shakeMag * Math.max(0, this.shakeTime) / this.shakeDur;
+        this.camera.position.x += (Math.random() - 0.5) * m;
+        this.camera.position.y += (Math.random() - 0.5) * m * 0.6;
+        this.camera.position.z += (Math.random() - 0.5) * m;
+      }
+      this.camera.lookAt(me.x + Math.cos(me.a) * 2.2, 0.9, me.z + Math.sin(me.a) * 2.2);
 
       const mm = this.playerMeshes.get(me.id);
       let spd = 0;

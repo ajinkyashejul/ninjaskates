@@ -37,6 +37,11 @@ export const MAPS = {
       leaf: 0x3fae4e,
       sandLight: 0xfbe9b2,
     },
+    // visual-only ground painting hints, mirrored by the client floor texture
+    paint: {
+      grass: [{ x: 0, z: 0, r: 9.5 }, { x: 13, z: 7, r: 5.5 }],
+      pond: { x: -11, z: -12, r: 4 },
+    },
     obstacles: [
       // grassy knoll in the middle of the island
       { kind: 'mound', x: 0, z: 0, w: 11, d: 11, h: 1.9 },
@@ -47,9 +52,19 @@ export const MAPS = {
       { kind: 'palm', x: 15, z: 13, w: 1.3, d: 1.3, h: 5 },
       { kind: 'palm', x: 0, z: -21, w: 1.3, d: 1.3, h: 5 },
       { kind: 'palm', x: 0, z: 21, w: 1.3, d: 1.3, h: 5 },
+      { kind: 'palm', x: -21, z: 0, w: 1.3, d: 1.3, h: 5 },
+      { kind: 'palm', x: 21, z: 0, w: 1.3, d: 1.3, h: 5 },
+      // red torii gates — skate between the pillars, under the beams
+      { kind: 'pillar', x: -12.2, z: 10, w: 0.9, d: 0.9, h: 3.6 },
+      { kind: 'pillar', x: -7.8, z: 10, w: 0.9, d: 0.9, h: 3.6 },
+      { kind: 'pillar', x: 10, z: -12.2, w: 0.9, d: 0.9, h: 3.6 },
+      { kind: 'pillar', x: 10, z: -7.8, w: 0.9, d: 0.9, h: 3.6 },
+      // beach huts
+      { kind: 'hut', x: 18, z: 16, w: 3.6, d: 3.6, h: 2.4 },
+      { kind: 'hut', x: -18, z: -16, w: 3.6, d: 3.6, h: 2.4 },
       // rocky outcrops
-      { kind: 'rock', x: -24, z: -5, w: 4.5, d: 6, h: 2.2 },
-      { kind: 'rock', x: 24, z: 5, w: 4.5, d: 6, h: 2.2 },
+      { kind: 'rock', x: -24, z: -6, w: 4.5, d: 6, h: 2.2 },
+      { kind: 'rock', x: 24, z: 6, w: 4.5, d: 6, h: 2.2 },
       { kind: 'rock', x: -6, z: 24, w: 6, d: 4, h: 1.9 },
       { kind: 'rock', x: 6, z: -24, w: 6, d: 4, h: 1.9 },
       // stacked supply crates
@@ -57,9 +72,11 @@ export const MAPS = {
       { kind: 'crates', x: 20, z: -9, w: 2.6, d: 2.6, h: 2.3 },
     ],
     decor: [
-      { kind: 'grass', x: -10, z: -9, s: 2.2 }, { kind: 'grass', x: 11, z: 8, s: 2.6 },
-      { kind: 'grass', x: -19, z: 17, s: 1.8 }, { kind: 'grass', x: 20, z: -17, s: 2.0 },
-      { kind: 'grass', x: -25, z: -18, s: 1.5 }, { kind: 'grass', x: 25, z: 18, s: 1.6 },
+      { kind: 'toriiTop', x: -10, z: 10, angle: 0 },
+      { kind: 'toriiTop', x: 10, z: -10, angle: Math.PI / 2 },
+      { kind: 'bush', x: 7, z: 14, s: 0.7 }, { kind: 'bush', x: -14, z: 4, s: 0.6 },
+      { kind: 'bush', x: 4, z: -15, s: 0.65 }, { kind: 'bush', x: 22, z: 14, s: 0.55 },
+      { kind: 'bush', x: -22, z: -12, s: 0.6 }, { kind: 'bush', x: 14, z: 21, s: 0.6 },
       { kind: 'searock', x: -40, z: -36, s: 3.2 }, { kind: 'searock', x: 42, z: 32, s: 2.6 },
       { kind: 'searock', x: 36, z: -42, s: 2.2 }, { kind: 'searock', x: -38, z: 40, s: 2.8 },
       { kind: 'searock', x: 0, z: -47, s: 2.0 }, { kind: 'searock', x: -48, z: 4, s: 2.4 },
@@ -68,6 +85,7 @@ export const MAPS = {
       { kind: 'umbrella', x: -30, z: 17, s: 1 },
       { kind: 'ball', x: 31.5, z: -11.5, s: 0.45 },
       { kind: 'dock', x: 0, z: 0, s: 1, angle: 0.65 }, // wooden pier into the sea
+      { kind: 'boat', x: 30, z: 27, angle: 0.9 },
     ],
     // 8 spawn points on a ring, facing the island center
     spawns: Array.from({ length: 8 }, (_, i) => {

@@ -156,7 +156,7 @@ function processEvents(events) {
         hud.killFeed(ev.kn, ev.vn, ev.w);
         renderer?.spawnExplosion(ev.x, ev.z, true);
         sfx.boom();
-        if (ev.vi === myId) hud.setDeathCause(ev.kn, ev.w);
+        if (ev.vi === myId) { hud.setDeathCause(ev.kn, ev.w); renderer?.shake(0.7, 0.45); }
         if (ev.ki === myId) { hud.smashBanner(`You smashed ${ev.vn}! 💥`); sfx.pickup(); }
         break;
       case 'boom':
@@ -170,7 +170,7 @@ function processEvents(events) {
         sfx.fire(ev.w);
         break;
       case 'hit':
-        if (ev.id === myId) { hud.damageFlash(); sfx.hit(); }
+        if (ev.id === myId) { hud.damageFlash(); sfx.hit(); renderer?.shake(0.3, 0.25); }
         break;
       case 'shield':
         if (ev.id === myId) sfx.shield();
