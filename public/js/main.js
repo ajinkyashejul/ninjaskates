@@ -30,6 +30,8 @@ let inGame = false;
 // physics locally every fixed step, so it responds on the next frame; the
 // server confirms asynchronously and we replay unacknowledged inputs.
 let pred = null; // predicted own state {x,z,angle,vx,vz,speed,driftCharge}
+let predAngVel = 0; // angular velocity of the last sim step, for extrapolation
+let lastStepAt = 0; // when that step ran — rendering extrapolates from here
 let pendingInputs = []; // [{s, inp}] not yet acknowledged by the server
 let inputSeq = 0;
 let errX = 0; let errZ = 0; let errA = 0; // render-smoothing offsets
@@ -182,7 +184,11 @@ net.on('joined', async (msg) => {
     getErr: () => [errX, errZ],
     pending: () => pendingInputs.length,
     getServerMe: () => snapshots[snapshots.length - 1]?.snap.p.find((p) => p.id === myId),
-    getRendered: () => (pred ? { x: pred.x + errX, z: pred.z + errZ } : null),
+    getRendered: () => {
+      if (!pred) return null;
+      const e = Math.min(SIM_DT, Math.max(0, (performance.now() - lastStepAt) / 1000));
+      return { x: pred.x + pred.vx * e + errX, z: pred.z + pred.vz * e + errZ };
+    },
   };
   $('menu').classList.add('hidden');
   hud.show(msg.room);
@@ -215,6 +221,7 @@ net.on('snap', (snap) => {
 function reconcile(me, state) {
   if (!pred || !me.al || state !== 'playing') {
     pred = { x: me.x, z: me.z, angle: me.a, vx: me.vx || 0, vz: me.vz || 0, speed: 0, driftCharge: 0 };
+    predAngVel = 0;
     pendingInputs = [];
     errX = errZ = errA = 0;
     return;
@@ -338,9 +345,17 @@ function buildView() {
 
   const prev = new Map(s0.snap.p.map((p) => [p.id, p]));
   const players = s1.snap.p.map((p) => {
-    // own skater: predicted state (frame-instant), not interpolation
+    // own skater: predicted state (frame-instant). The 30Hz sim result is
+    // extrapolated by velocity so motion stays continuous at any frame rate
+    // and across sim-pump catch-up bursts.
     if (p.id === myId && pred && p.al && latest.snap.st === 'playing') {
-      return { ...p, x: pred.x + errX, z: pred.z + errZ, a: pred.angle + errA };
+      const e = Math.min(SIM_DT, Math.max(0, (performance.now() - lastStepAt) / 1000));
+      return {
+        ...p,
+        x: pred.x + pred.vx * e + errX,
+        z: pred.z + pred.vz * e + errZ,
+        a: pred.angle + predAngVel * e + errA,
+      };
     }
     const q = prev.get(p.id);
     if (!q || !p.al || !q.al) return p;
@@ -383,7 +398,10 @@ function stepPrediction() {
 
   pendingInputs.push({ s: inputSeq, inp: { u: s.u, d: s.d, l: s.l, r: s.r, dr: s.dr } });
   if (pendingInputs.length > 120) pendingInputs.splice(0, pendingInputs.length - 120);
+  const a0 = pred.angle;
   stepMovement(pred, pendingInputs[pendingInputs.length - 1].inp, SIM_DT, mapDef, !!me.bo);
+  predAngVel = wrapAngle(pred.angle - a0) / SIM_DT;
+  lastStepAt = performance.now();
   if (pred.driftBoosted) {
     pred.driftBoosted = false;
     sfx.pickup(); // immediate local feedback; the server event brings the fx
