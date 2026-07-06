@@ -78,7 +78,7 @@
       </div>
 
       <p id="menu-error" class="error hidden"></p>
-      <p class="controls-hint">WASD / arrows to skate · Space or click to attack</p>
+      <p class="controls-hint">WASD to skate · Space to attack · hold SHIFT in turns to drift, release for a boost</p>
     </div>
     <div class="menu-preview">
       <canvas id="preview-canvas"></canvas>
@@ -102,6 +102,7 @@
       <div id="leaderboard"></div>
     </div>
 
+    <div id="hitmarker" class="hidden">✕</div>
     <div id="killfeed"></div>
     <div id="pickup-banner" class="hidden"></div>
     <div id="smash-banner" class="hidden"></div>
@@ -133,6 +134,7 @@
     <!-- touch controls -->
     <div id="touch-stick"><div id="touch-knob"></div></div>
     <div id="touch-fire">⚔️</div>
+    <div id="touch-drift">🌀</div>
   </div>
 
   <div id="toast" class="hidden"></div>

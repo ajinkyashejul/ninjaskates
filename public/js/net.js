@@ -5,6 +5,8 @@ export class Net {
     this.ws = null;
     this.handlers = new Map();
     this.ping = 0;
+    // ?fakelag=200 simulates 200ms round-trip for netcode testing
+    this.fakeLag = Number(new URLSearchParams(location.search).get('fakelag') || 0) / 2;
   }
 
   on(type, fn) {
@@ -31,17 +33,24 @@ export class Net {
       ws.onmessage = (ev) => {
         let msg;
         try { msg = JSON.parse(ev.data); } catch { return; }
-        if (msg.t === 'pong') {
-          this.ping = Math.round(performance.now() - msg.ts);
-          return;
-        }
-        const fn = this.handlers.get(msg.t);
-        if (fn) fn(msg);
+        const dispatch = () => {
+          if (msg.t === 'pong') {
+            this.ping = Math.round(performance.now() - msg.ts);
+            return;
+          }
+          const fn = this.handlers.get(msg.t);
+          if (fn) fn(msg);
+        };
+        if (this.fakeLag) setTimeout(dispatch, this.fakeLag);
+        else dispatch();
       };
     });
   }
 
   send(obj) {
-    if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj));
+    if (!this.ws || this.ws.readyState !== 1) return;
+    const data = JSON.stringify(obj);
+    if (this.fakeLag) setTimeout(() => { if (this.ws.readyState === 1) this.ws.send(data); }, this.fakeLag);
+    else this.ws.send(data);
   }
 }

@@ -307,7 +307,7 @@ html, body {
 #results-table td.num { font-variant-numeric: tabular-nums; text-align: right; }
 
 /* touch controls: shown only on coarse pointers */
-#touch-stick, #touch-fire { display: none; }
+#touch-stick, #touch-fire, #touch-drift { display: none; }
 @media (pointer: coarse) {
   #touch-stick {
     display: block; position: absolute; bottom: 70px; left: 26px;
@@ -338,4 +338,25 @@ html, body {
 #session-tally {
   color: #ffd84d; font-size: 18px; font-weight: 800;
   margin-bottom: 10px; text-shadow: 0 2px 0 rgba(120, 80, 0, 0.45);
+}
+
+#hitmarker {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 44px; font-weight: 800; color: #fff; pointer-events: none;
+  text-shadow: 0 0 10px rgba(255, 80, 80, 0.9), 0 2px 0 rgba(120, 20, 20, 0.8);
+  animation: hm-pop 0.16s ease-out;
+}
+@keyframes hm-pop {
+  from { transform: translate(-50%, -50%) scale(1.7); opacity: 0.4; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+@media (pointer: coarse) {
+  #touch-drift {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; bottom: 190px; right: 44px;
+    width: 68px; height: 68px; border-radius: 50%;
+    background: rgba(80, 180, 255, 0.3); border: 3px solid #4aa8ef;
+    font-size: 28px; pointer-events: auto;
+  }
 }

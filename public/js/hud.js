@@ -1,6 +1,8 @@
 // DOM heads-up display: timer, leaderboard, health, weapon, kill feed,
 // respawn + results overlays.
 
+import { sfx } from './sfx.js';
+
 const $ = (id) => document.getElementById(id);
 
 const WEAPON_LABELS = {
@@ -69,6 +71,16 @@ export class Hud {
     this._bannerTimer = setTimeout(() => b.classList.add('hidden'), 1500);
   }
 
+  hitmarker() {
+    const h = $('hitmarker');
+    h.classList.remove('hidden');
+    h.style.animation = 'none';
+    void h.offsetWidth;
+    h.style.animation = '';
+    clearTimeout(this._hmTimer);
+    this._hmTimer = setTimeout(() => h.classList.add('hidden'), 160);
+  }
+
   goFlash() {
     this._goFlashing = true;
     const cd = $('countdown-overlay');
@@ -132,8 +144,14 @@ export class Hud {
     const cd = $('countdown-overlay');
     if (view.state === 'starting') {
       cd.classList.remove('hidden');
-      $('countdown-num').textContent = Math.max(1, Math.ceil(t));
+      const num = Math.max(1, Math.ceil(t));
+      $('countdown-num').textContent = num;
+      if (num !== this._lastCdNum) {
+        this._lastCdNum = num;
+        sfx.countdownTick();
+      }
     } else if (!this._goFlashing) {
+      this._lastCdNum = null;
       cd.classList.add('hidden');
     }
 

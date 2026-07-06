@@ -1,11 +1,10 @@
-// Keyboard + touch input. Sends the held-input state to the server whenever
-// it changes (plus a low-rate keepalive so a dropped packet can't stick keys).
+// Keyboard + touch input. This module only tracks the held-input state —
+// the main loop samples it at the fixed simulation rate, predicts locally,
+// and sends it to the server with a sequence number.
 
 export class Input {
-  constructor(net) {
-    this.net = net;
-    this.state = { u: false, d: false, l: false, r: false, f: false };
-    this._last = '';
+  constructor() {
+    this.state = { u: false, d: false, l: false, r: false, f: false, dr: false };
   }
 
   start() {
@@ -15,45 +14,35 @@ export class Input {
       KeyA: 'l', ArrowLeft: 'l',
       KeyD: 'r', ArrowRight: 'r',
       Space: 'f',
+      ShiftLeft: 'dr', ShiftRight: 'dr',
     };
     window.addEventListener('keydown', (e) => {
       const k = keymap[e.code];
       if (!k) return;
       e.preventDefault();
       this.state[k] = true;
-      this._push();
     });
     window.addEventListener('keyup', (e) => {
       const k = keymap[e.code];
       if (!k) return;
       this.state[k] = false;
-      this._push();
     });
     window.addEventListener('blur', () => {
       Object.keys(this.state).forEach((k) => { this.state[k] = false; });
-      this._push();
     });
 
     const canvas = document.getElementById('game');
-    canvas.addEventListener('mousedown', () => { this.state.f = true; this._push(); });
-    window.addEventListener('mouseup', () => { this.state.f = false; this._push(); });
+    canvas.addEventListener('mousedown', () => { this.state.f = true; });
+    window.addEventListener('mouseup', () => { this.state.f = false; });
 
     this._touch();
-    setInterval(() => this._push(true), 250); // keepalive
-  }
-
-  _push(force = false) {
-    const s = this.state;
-    const key = `${s.u}${s.d}${s.l}${s.r}${s.f}`;
-    if (!force && key === this._last) return;
-    this._last = key;
-    this.net.send({ t: 'input', u: s.u, d: s.d, l: s.l, r: s.r, f: s.f });
   }
 
   _touch() {
     const stick = document.getElementById('touch-stick');
     const knob = document.getElementById('touch-knob');
     const fire = document.getElementById('touch-fire');
+    const drift = document.getElementById('touch-drift');
     if (!stick) return;
 
     let stickTouch = null;
@@ -71,7 +60,6 @@ export class Input {
       this.state.d = nz > 0.45;
       this.state.l = nx < -0.3;
       this.state.r = nx > 0.3;
-      this._push();
     };
 
     stick.addEventListener('touchstart', (e) => {
@@ -92,18 +80,15 @@ export class Input {
         knob.style.left = '40px';
         knob.style.top = '40px';
         this.state.u = this.state.d = this.state.l = this.state.r = false;
-        this._push();
       }
     });
 
-    fire.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.state.f = true;
-      this._push();
-    });
-    fire.addEventListener('touchend', () => {
-      this.state.f = false;
-      this._push();
-    });
+    const bindButton = (el, key) => {
+      if (!el) return;
+      el.addEventListener('touchstart', (e) => { e.preventDefault(); this.state[key] = true; });
+      el.addEventListener('touchend', () => { this.state[key] = false; });
+    };
+    bindButton(fire, 'f');
+    bindButton(drift, 'dr');
   }
 }

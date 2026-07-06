@@ -8,20 +8,32 @@ import { MenuScene } from './menu-scene.js';
 import { Hud } from './hud.js';
 import { sfx } from './sfx.js';
 import { preloadModels } from './assets.js';
+import { DT as SIM_DT, stepMovement, wrapAngle } from './physics.js';
 
 preloadModels(); // fetch glTF props in the background while the menu shows
 
 const $ = (id) => document.getElementById(id);
 
-const INTERP_DELAY = 130; // ms behind the latest snapshot we render
+const INTERP_DELAY = 100; // ms behind the latest snapshot we render OTHERS
 
 const net = new Net();
 const hud = new Hud();
+const input = new Input();
 let renderer = null;
 let myId = null;
+let mapDef = null;
 let snapshots = []; // { at, snap }
 let wasAlive = true;
 let inGame = false;
+
+// ---- client-side prediction state: your own skater runs the shared
+// physics locally every fixed step, so it responds on the next frame; the
+// server confirms asynchronously and we replay unacknowledged inputs.
+let pred = null; // predicted own state {x,z,angle,vx,vz,speed,driftCharge}
+let pendingInputs = []; // [{s, inp}] not yet acknowledged by the server
+let inputSeq = 0;
+let errX = 0; let errZ = 0; let errA = 0; // render-smoothing offsets
+let predTimer = null;
 
 // ------------------------------------------------------------------- menu
 
@@ -155,32 +167,78 @@ net.on('close', () => {
 
 net.on('joined', async (msg) => {
   myId = msg.id;
+  mapDef = msg.map;
   inGame = true;
   snapshots = [];
+  pred = null;
+  pendingInputs = [];
   menuScene?.dispose();
   menuScene = null;
   await preloadModels(); // usually already done while the menu was up
   renderer = new Renderer($('game'), msg.map);
   window.__renderer = renderer; // debug/QA handle
+  window.__dbg = {
+    getPred: () => pred,
+    getErr: () => [errX, errZ],
+    pending: () => pendingInputs.length,
+    getServerMe: () => snapshots[snapshots.length - 1]?.snap.p.find((p) => p.id === myId),
+    getRendered: () => (pred ? { x: pred.x + errX, z: pred.z + errZ } : null),
+  };
   $('menu').classList.add('hidden');
   hud.show(msg.room);
   hud.toast(`Welcome to ${msg.map.name}! Grab a crate to arm up.`);
-  new Input(net).start();
+  input.start();
+  // the prediction pump runs on a fixed timer, NOT the render loop, so the
+  // simulation keeps pace even when rendering hitches
+  clearInterval(predTimer);
+  predTimer = setInterval(stepPrediction, 1000 / 30);
   requestAnimationFrame(loop);
 });
 
 net.on('snap', (snap) => {
   snapshots.push({ at: performance.now(), snap });
-  if (snapshots.length > 30) snapshots.splice(0, snapshots.length - 30);
+  if (snapshots.length > 40) snapshots.splice(0, snapshots.length - 40);
   processEvents(snap.ev || []);
 
-  // detect my own death for sound/feel
   const me = snap.p.find((p) => p.id === myId);
   if (me) {
+    // detect my own death for sound/feel
     if (wasAlive && !me.al) sfx.death();
     wasAlive = !!me.al;
+    reconcile(me, snap.st);
   }
 });
+
+// Server state arrived: rewind our prediction to it, replay every input the
+// server hasn't processed yet, and fold any disagreement into a smoothing
+// offset that decays over a few frames (instead of a visible snap).
+function reconcile(me, state) {
+  if (!pred || !me.al || state !== 'playing') {
+    pred = { x: me.x, z: me.z, angle: me.a, vx: me.vx || 0, vz: me.vz || 0, speed: 0, driftCharge: 0 };
+    pendingInputs = [];
+    errX = errZ = errA = 0;
+    return;
+  }
+  const beforeX = pred.x + errX;
+  const beforeZ = pred.z + errZ;
+  const beforeA = pred.angle + errA;
+
+  pred.x = me.x; pred.z = me.z; pred.angle = me.a;
+  pred.vx = me.vx || 0; pred.vz = me.vz || 0;
+  const acked = me.ls || 0;
+  pendingInputs = pendingInputs.filter((pi) => pi.s > acked);
+  for (const pi of pendingInputs) stepMovement(pred, pi.inp, SIM_DT, mapDef, !!me.bo);
+
+  const ex = beforeX - pred.x;
+  const ez = beforeZ - pred.z;
+  if (Math.hypot(ex, ez) > 4) {
+    // teleport-scale difference (respawn, knockback burst): snap, don't glide
+    errX = errZ = errA = 0;
+  } else {
+    errX = ex; errZ = ez;
+    errA = wrapAngle(beforeA - pred.angle);
+  }
+}
 
 function processEvents(events) {
   for (const ev of events) {
@@ -190,7 +248,20 @@ function processEvents(events) {
         renderer?.spawnExplosion(ev.x, ev.z, true);
         sfx.boom();
         if (ev.vi === myId) { hud.setDeathCause(ev.kn, ev.w); renderer?.shake(0.7, 0.45); }
-        if (ev.ki === myId) { hud.smashBanner(`You smashed ${ev.vn}! 💥`); sfx.pickup(); }
+        if (ev.ki === myId) {
+          if (ev.ks === 3) hud.smashBanner(`You smashed ${ev.vn}! 🔥 KILLING SPREE!`);
+          else if (ev.ks === 5) hud.smashBanner('⚡ RAMPAGE! 5 in a row!');
+          else if (ev.ks >= 7) hud.smashBanner(`💀 UNSTOPPABLE ×${ev.ks}`);
+          else hud.smashBanner(`You smashed ${ev.vn}! 💥`);
+          if (ev.vs >= 3) hud.toast(`You ended ${ev.vn}'s ${ev.vs}-kill spree!`);
+          sfx.pickup();
+        } else if (ev.ks === 3 || ev.ks === 5 || ev.ks === 8) {
+          hud.toast(`🔥 ${ev.kn} is on a ${ev.ks}-kill streak!`);
+        }
+        break;
+      case 'drift':
+        if (ev.id === myId) { sfx.drift(); renderer?.shake(0.12, 0.15); }
+        renderer?.spawnDriftBoost(ev.x, ev.z);
         break;
       case 'boom':
         renderer?.spawnExplosion(ev.x, ev.z, !!ev.big);
@@ -204,6 +275,11 @@ function processEvents(events) {
         break;
       case 'hit':
         if (ev.id === myId) { hud.damageFlash(); sfx.hit(); renderer?.shake(0.3, 0.25); }
+        if (ev.ai === myId && ev.id !== myId) {
+          hud.hitmarker();
+          sfx.hitConfirm();
+          renderer?.spawnDamageNumber(ev.x, ev.z, ev.dmg);
+        }
         break;
       case 'shield':
         if (ev.id === myId) sfx.shield();
@@ -262,6 +338,10 @@ function buildView() {
 
   const prev = new Map(s0.snap.p.map((p) => [p.id, p]));
   const players = s1.snap.p.map((p) => {
+    // own skater: predicted state (frame-instant), not interpolation
+    if (p.id === myId && pred && p.al && latest.snap.st === 'playing') {
+      return { ...p, x: pred.x + errX, z: pred.z + errZ, a: pred.angle + errA };
+    }
     const q = prev.get(p.id);
     if (!q || !p.al || !q.al) return p;
     return { ...p, x: lerp(q.x, p.x, t), z: lerp(q.z, p.z, t), a: lerpAngle(q.a, p.a, t) };
@@ -289,12 +369,37 @@ function buildView() {
 let lastFrame = performance.now();
 let elapsed = 0;
 
+// One fixed simulation step: sample held input, predict locally, send to the
+// server tagged with a sequence number. Runs at the same rate as the server
+// tick so replayed inputs line up.
+function stepPrediction() {
+  inputSeq++;
+  const s = input.state;
+  net.send({ t: 'input', s: inputSeq, u: s.u, d: s.d, l: s.l, r: s.r, f: s.f, dr: s.dr });
+
+  const latest = snapshots[snapshots.length - 1];
+  const me = latest?.snap.p.find((p) => p.id === myId);
+  if (!pred || !me || !me.al || latest.snap.st !== 'playing') return;
+
+  pendingInputs.push({ s: inputSeq, inp: { u: s.u, d: s.d, l: s.l, r: s.r, dr: s.dr } });
+  if (pendingInputs.length > 120) pendingInputs.splice(0, pendingInputs.length - 120);
+  stepMovement(pred, pendingInputs[pendingInputs.length - 1].inp, SIM_DT, mapDef, !!me.bo);
+  if (pred.driftBoosted) {
+    pred.driftBoosted = false;
+    sfx.pickup(); // immediate local feedback; the server event brings the fx
+  }
+}
+
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
   const dt = Math.min(0.1, (now - lastFrame) / 1000);
   lastFrame = now;
   elapsed += dt;
+
+  // reconciliation error bleeds away smoothly instead of snapping
+  const decay = Math.exp(-14 * dt);
+  errX *= decay; errZ *= decay; errA *= decay;
 
   const view = buildView();
   if (!view || !renderer) return;

@@ -432,12 +432,30 @@ export function buildSkater(color) {
   shield.position.y = 1.0;
   outer.add(shield);
 
+  // overhead health pips (billboarded each frame; hidden for your own skater)
+  const hpBar = new THREE.Group();
+  const hpBg = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.2, 0.17),
+    new THREE.MeshBasicMaterial({ color: 0x101522, transparent: true, opacity: 0.7, depthTest: false }),
+  );
+  const hpFg = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.12, 0.11),
+    new THREE.MeshBasicMaterial({ color: 0x55e07a, depthTest: false }),
+  );
+  hpFg.position.z = 0.001;
+  hpBg.renderOrder = 998;
+  hpFg.renderOrder = 999;
+  hpBar.add(hpBg, hpFg);
+  hpBar.position.y = 2.32;
+  outer.add(hpBar);
+
   outer.scale.setScalar(1.14); // a touch larger-than-life for screen presence
 
   outer.userData = {
     body, legL, legR, armL, armR, head, shield, torso,
+    hpBar, hpFg,
     phase: 0, lastX: null, lastZ: null, lastA: null, roll: 0,
-    lastSkid: 0, lastPuff: 0, lastSmoke: 0, lastDust: 0,
+    lastSkid: 0, lastPuff: 0, lastSmoke: 0, lastDust: 0, lastSpark: 0,
   };
   return outer;
 }
@@ -1256,6 +1274,36 @@ export class Renderer {
     this._fx(m, 'flat', 0.9);
   }
 
+  spawnDamageNumber(x, z, dmg) {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 64;
+    const g = c.getContext('2d');
+    g.font = "bold 46px 'Baloo 2', sans-serif";
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 8;
+    g.strokeStyle = 'rgba(90, 20, 20, 0.9)';
+    g.strokeText(`-${Math.round(dmg)}`, 64, 32);
+    g.fillStyle = '#ffd84d';
+    g.fillText(`-${Math.round(dmg)}`, 64, 32);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(c), depthTest: false, transparent: true,
+    }));
+    sprite.scale.set(1.5, 0.75, 1);
+    sprite.position.set(x + (Math.random() - 0.5) * 0.4, 2.0, z);
+    this._fx(sprite, 'dmg', 0.8);
+  }
+
+  spawnDriftBoost(x, z) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.6, 0.1, 8, 20),
+      new THREE.MeshBasicMaterial({ color: 0xaef0ff, opacity: 0.85 }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.3, z);
+    this._fx(ring, 'burst', 0.35, { size: 2.4 });
+  }
+
   _puff(x, y, z, color, size = 0.22, life = 0.5) {
     const m = new THREE.Mesh(
       new THREE.SphereGeometry(size, 7, 5),
@@ -1374,6 +1422,17 @@ export class Renderer {
         0.45,
       );
     }
+    // drift sparks while sliding (server confirms via the df flag)
+    if (p.df && now - u.lastSpark > 0.07) {
+      u.lastSpark = now;
+      const side = Math.sin(u.phase) > 0 ? 0.2 : -0.2;
+      this._puff(
+        p.x - Math.cos(p.a) * 0.5 - Math.sin(p.a) * side,
+        0.12,
+        p.z - Math.sin(p.a) * 0.5 + Math.cos(p.a) * side,
+        0xffc23a, 0.13, 0.3,
+      );
+    }
     if (p.bo && now - u.lastPuff > 0.07) {
       u.lastPuff = now;
       this._puff(p.x - Math.cos(p.a) * 0.8, 0.35, p.z - Math.sin(p.a) * 0.8, 0xdff6ff, 0.2, 0.4);
@@ -1435,6 +1494,16 @@ export class Renderer {
 
       u.shield.visible = !!p.al && !!p.sh;
       u.shield.material.opacity = 0.14 + 0.07 * Math.sin(elapsed * 8);
+      // enemy health pips, billboarded to the camera
+      const showBar = !!p.al && p.id !== myId;
+      u.hpBar.visible = showBar;
+      if (showBar) {
+        const frac = Math.max(0.02, p.hp / 100);
+        u.hpFg.scale.x = frac;
+        u.hpFg.position.x = -0.56 * (1 - frac);
+        u.hpFg.material.color.setHex(p.hp > 50 ? 0x55e07a : p.hp > 25 ? 0xffb84d : 0xff4d5a);
+        u.hpBar.quaternion.copy(this.camera.quaternion);
+      }
       u.torso.material.emissive.setHex(p.bo ? this.colorFor(p.id) : 0x000000);
       u.torso.material.emissiveIntensity = p.bo ? 0.45 : 0;
       if (p.al) this._animateSkater(m, p, dt, elapsed);
@@ -1496,6 +1565,9 @@ export class Renderer {
       if (fx.kind === 'burst') {
         fx.mesh.scale.setScalar(0.3 + t * fx.size);
         fx.mesh.material.opacity = 0.9 * (1 - t);
+      } else if (fx.kind === 'dmg') {
+        fx.mesh.position.y += dt * 1.4;
+        fx.mesh.material.opacity = 1 - t * t;
       } else if (fx.kind === 'puff') {
         fx.mesh.position.y += dt * 0.9;
         fx.mesh.scale.setScalar(1 + t * 1.2);
