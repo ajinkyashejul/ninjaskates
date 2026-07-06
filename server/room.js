@@ -34,12 +34,18 @@ function wrapAngle(a) {
   return a;
 }
 
+const CLONE_HP = 40;
+const CLONES_PER_PLAYER = 3;
+const CLONES_PER_ROOM = 12;
+const CLONE_FIRE_SLOWDOWN = 2.5;
+
 export class Room {
-  constructor(code, { mapId, duration, isPublic, botCount }) {
+  constructor(code, { mapId, duration, isPublic, botCount, clones }) {
     this.code = code;
     this.map = MAPS[mapId] || MAPS.skatepark;
     this.duration = duration === 360 ? 360 : 180; // 3 or 6 minutes
     this.isPublic = !!isPublic;
+    this.clonesEnabled = clones !== false; // signature mechanic, default on
     this.desiredBots = Math.max(0, Math.min(6, botCount | 0));
 
     this.players = new Map(); // id -> player (humans and bots)
@@ -115,18 +121,72 @@ export class Room {
       // bot brain state
       think: 0, targetX: 0, targetZ: 0, targetPlayer: null,
       stuckTime: 0, reverseUntil: 0,
+      // shadow-clone fields
+      clone: null, // owner id when this entity is a clone
+      capScale: 1,
     };
   }
 
+  // ------------------------------------------------------- shadow clones
+
+  cloneCount(ownerId) {
+    let n = 0;
+    for (const p of this.players.values()) if (p.clone === ownerId) n++;
+    return n;
+  }
+
+  spawnClone(owner) {
+    if (!this.clonesEnabled || !owner.alive) return;
+    if (this.cloneCount(owner.id) >= CLONES_PER_PLAYER) return;
+    let total = 0;
+    for (const p of this.players.values()) if (p.clone) total++;
+    if (total >= CLONES_PER_ROOM) return;
+
+    const c = this.makePlayer(owner.name, true);
+    c.clone = owner.id;
+    c.hp = CLONE_HP;
+    c.capScale = 0.85;
+    c.weapon = { type: 'shuriken', ammo: 9999 };
+    c.shieldUntil = this.time + 1; // brief materialize protection
+    const a = Math.random() * Math.PI * 2;
+    c.x = owner.x + Math.cos(a) * 2.2;
+    c.z = owner.z + Math.sin(a) * 2.2;
+    c.angle = owner.angle;
+    collideCircleWorld(c, PLAYER_RADIUS, this.map, 0);
+    this.players.set(c.id, c);
+    this.events.push({ e: 'clone', oi: owner.id, n: owner.name, x: c.x, z: c.z });
+  }
+
+  removeClonesOf(ownerId) {
+    for (const p of [...this.players.values()]) {
+      if (p.clone === ownerId) {
+        this.events.push({ e: 'poof', x: p.x, z: p.z });
+        this.players.delete(p.id);
+      }
+    }
+  }
+
+  roster() { // real combatants: humans + bots, not clones
+    return [...this.players.values()].filter((p) => !p.clone);
+  }
+
   addHuman(ws, rawName) {
-    if (this.players.size >= MAX_PLAYERS) {
+    if (this.roster().length >= MAX_PLAYERS) {
       // Kick a bot to make room for a human.
-      const bot = [...this.players.values()].find((p) => p.bot);
+      const bot = this.roster().find((p) => p.bot);
       if (!bot) return null;
+      this.removeClonesOf(bot.id);
       this.players.delete(bot.id);
       this.events.push({ e: 'leave', n: bot.name });
     }
-    const p = this.makePlayer(sanitizeName(rawName), false);
+    // dedupe names so the session tally and kill feed stay unambiguous
+    const base = sanitizeName(rawName);
+    let name = base;
+    let i = 2;
+    while ([...this.players.values()].some((p) => p.name === name)) {
+      name = `${base.slice(0, 12)}·${i++}`;
+    }
+    const p = this.makePlayer(name, false);
     this.players.set(p.id, p);
     this.sockets.set(p.id, ws);
     this.events.push({ e: 'join', n: p.name });
@@ -136,6 +196,7 @@ export class Room {
   removePlayer(id) {
     const p = this.players.get(id);
     if (!p) return;
+    this.removeClonesOf(id);
     this.players.delete(id);
     this.sockets.delete(id);
     this.events.push({ e: 'leave', n: p.name });
@@ -143,8 +204,8 @@ export class Room {
   }
 
   ensureBots() {
-    const bots = [...this.players.values()].filter((p) => p.bot);
-    const room = MAX_PLAYERS - this.players.size;
+    const bots = this.roster().filter((p) => p.bot);
+    const room = MAX_PLAYERS - this.roster().length;
     const want = Math.min(this.desiredBots, bots.length + room);
     for (let i = bots.length; i < want; i++) {
       const b = this.makePlayer(pickBotName(this), true);
@@ -207,7 +268,7 @@ export class Room {
     this.resultsEndsAt = this.time + RESULTS_DURATION;
     this.projectiles = [];
     this.mines = [];
-    const standings = [...this.players.values()]
+    const standings = this.roster()
       .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)
       .map((p) => ({ n: p.name, k: p.kills, d: p.deaths, bot: p.bot }));
     // session tally: who's winning the office session across matches
@@ -225,8 +286,9 @@ export class Room {
     this.state = 'starting';
     this.playAt = this.time + 3;
     for (const c of this.crates) { c.active = true; c.respawnAt = 0; }
-    for (const p of this.players.values()) {
-      p.kills = 0; p.deaths = 0;
+    for (const p of [...this.players.values()]) {
+      if (p.clone) { this.players.delete(p.id); continue; } // fresh match, no armies
+      p.kills = 0; p.deaths = 0; p.streak = 0;
       this.respawn(p);
     }
   }
@@ -250,6 +312,10 @@ export class Room {
     // this tick consumes whatever input state has arrived by now
     if (p.receivedSeq !== undefined) p.lastInputSeq = p.receivedSeq;
     if (!p.alive) {
+      if (p.clone) { // clones don't respawn — they fade
+        this.players.delete(p.id);
+        return;
+      }
       if (this.time >= p.respawnAt) this.respawn(p);
       return;
     }
@@ -293,7 +359,8 @@ export class Room {
   handleFire(p) {
     if (!p.alive || !p.input.f || !p.weapon) return;
     const spec = WEAPONS[p.weapon.type];
-    if (!spec || this.time - p.lastFireAt < spec.fireInterval) return;
+    const interval = spec ? spec.fireInterval * (p.clone ? CLONE_FIRE_SLOWDOWN : 1) : Infinity;
+    if (!spec || this.time - p.lastFireAt < interval) return;
     p.lastFireAt = this.time;
     p.weapon.ammo--;
 
@@ -466,20 +533,30 @@ export class Room {
       victim.streak = 0;
       victim.respawnAt = this.time + RESPAWN_DELAY;
       victim.weapon = null;
-      const killer = attackerId != null ? this.players.get(attackerId) : null;
-      if (killer && killer.id !== victim.id) { killer.kills++; killer.streak++; }
-      this.events.push({
-        e: 'kill',
-        kn: killer ? killer.name : '???',
-        vn: victim.name,
-        ki: killer ? killer.id : null,
-        vi: victim.id,
-        ks: killer ? killer.streak : 0,
-        vs: victimStreak,
-        w: weaponType,
-        x: victim.x,
-        z: victim.z,
-      });
+      // a clone's kills credit its owner
+      const attacker = attackerId != null ? this.players.get(attackerId) : null;
+      const killer = attacker?.clone ? this.players.get(attacker.clone) ?? attacker : attacker;
+      const victimIsMine = killer && (victim.id === killer.id || victim.clone === killer.id);
+      if (killer && !victimIsMine && !victim.clone) { killer.kills++; killer.streak++; }
+      if (victim.clone) {
+        // clones fade without a death announcement
+        this.events.push({ e: 'poof', x: victim.x, z: victim.z });
+      } else {
+        this.removeClonesOf(victim.id); // your army dies with you
+        this.events.push({
+          e: 'kill',
+          kn: killer ? killer.name : '???',
+          vn: victim.name,
+          ki: killer ? killer.id : null,
+          vi: victim.id,
+          ks: killer ? killer.streak : 0,
+          vs: victimStreak,
+          w: weaponType,
+          x: victim.x,
+          z: victim.z,
+        });
+        if (killer && !victimIsMine) this.spawnClone(killer);
+      }
     }
   }
 
@@ -492,7 +569,7 @@ export class Room {
         continue;
       }
       for (const p of this.players.values()) {
-        if (!p.alive) continue;
+        if (!p.alive || p.clone) continue; // clones don't loot
         const dx = p.x - c.x;
         const dz = p.z - c.z;
         if (dx * dx + dz * dz > CRATE_PICKUP_DIST * CRATE_PICKUP_DIST) continue;
@@ -548,6 +625,7 @@ export class Room {
         k: p.kills, d: p.deaths, st: p.streak,
         rs: p.alive ? 0 : r2(Math.max(0, p.respawnAt - this.time)),
         bot: p.bot ? 1 : 0,
+        cl: p.clone || 0,
       })),
       pr: this.projectiles.map((pr) => ({
         id: pr.id, ty: pr.type, x: r2(pr.x), z: r2(pr.z),

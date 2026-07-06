@@ -115,7 +115,8 @@ export function stepMovement(p, inp, dt, map, boosted) {
   }
 
   // speed cap: drift boosts may exceed it briefly, then bleed back down
-  const cap = boosted ? BOOST_MAX_SPEED : MAX_SPEED;
+  // (capScale lets special entities like shadow clones run a bit slower)
+  const cap = (boosted ? BOOST_MAX_SPEED : MAX_SPEED) * (p.capScale || 1);
   if (fwd > cap) fwd = Math.max(cap, fwd - OVERSPEED_DECAY * dt);
   fwd = Math.max(-REVERSE_MAX, fwd);
 

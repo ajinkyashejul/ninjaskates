@@ -45,6 +45,7 @@ export default {
         duration: body.duration === 360 ? 360 : 180,
         isPublic: false,
         botCount: Math.max(0, Math.min(6, body.bots | 0)),
+        clones: body.clones !== false,
       };
       // vanity code support: "standing rooms" your group can bookmark; if
       // the room already exists you simply join it

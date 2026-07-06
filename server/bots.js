@@ -23,10 +23,13 @@ function wrapAngle(a) {
 }
 
 function nearestEnemy(room, bot) {
+  // clones fight for their owner: never target the owner or teammates-in-smoke
+  const ownerId = bot.clone || bot.id;
   let best = null;
   let bestD2 = Infinity;
   for (const p of room.players.values()) {
     if (p.id === bot.id || !p.alive) continue;
+    if (p.id === ownerId || p.clone === ownerId) continue;
     if (room.time < p.shieldUntil) continue; // don't waste ammo on shields
     const d2 = (p.x - bot.x) ** 2 + (p.z - bot.z) ** 2;
     if (d2 < bestD2) { bestD2 = d2; best = p; }
@@ -61,7 +64,15 @@ export function updateBot(room, bot, dt) {
         bot.targetZ = enemy.z + Math.sin(enemy.angle) * lead;
       }
     }
-    if (!bot.targetPlayer) {
+    if (!bot.targetPlayer && bot.clone) {
+      // no enemy in mind: escort the owner in loose formation
+      const owner = room.players.get(bot.clone);
+      if (owner) {
+        const slot = (parseInt(bot.id, 36) % 6) / 6 * Math.PI * 2;
+        bot.targetX = owner.x + Math.cos(slot) * 3.5;
+        bot.targetZ = owner.z + Math.sin(slot) * 3.5;
+      }
+    } else if (!bot.targetPlayer) {
       const crate = nearestCrate(room, bot);
       if (crate) {
         bot.targetX = crate.x;

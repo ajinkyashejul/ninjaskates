@@ -155,8 +155,8 @@ export class Hud {
       cd.classList.add('hidden');
     }
 
-    // leaderboard + my rank chip
-    const sorted = [...view.players].sort((a, b) => b.k - a.k || a.d - b.d);
+    // leaderboard + my rank chip (clones are props, not competitors)
+    const sorted = view.players.filter((p) => !p.cl).sort((a, b) => b.k - a.k || a.d - b.d);
     const myRank = sorted.findIndex((p) => p.id === myId) + 1;
     if (myRank > 0) {
       $('rank-chip').innerHTML =
@@ -178,6 +178,16 @@ export class Hud {
       } else {
         $('weapon-name').textContent = 'Grab a crate!';
         $('weapon-ammo').textContent = '';
+      }
+
+      // shadow army counter
+      const clones = view.players.filter((p) => p.cl === myId && p.al).length;
+      const chip = $('clone-chip');
+      if (clones > 0) {
+        chip.textContent = `☁ ×${clones}`;
+        chip.classList.remove('hidden');
+      } else {
+        chip.classList.add('hidden');
       }
 
       const respawn = $('respawn-overlay');

@@ -1182,9 +1182,22 @@ export class Renderer {
   _playerMesh(p) {
     let m = this.playerMeshes.get(p.id);
     if (!m) {
-      const color = this.colorFor(p.id);
+      // clones wear their owner's color, darkened and smoky
+      const color = this.colorFor(p.cl || p.id);
       m = buildSkater(color);
-      m.add(nameSprite(p.n, color));
+      if (p.cl) {
+        m.traverse((o) => {
+          if (o.isMesh && o.material?.isMeshStandardMaterial) {
+            o.material.transparent = true;
+            o.material.opacity = 0.55;
+            o.material.color.multiplyScalar(0.35);
+            o.castShadow = false;
+          }
+        });
+        m.add(nameSprite(`☁ ${p.n}`, 0x9aa5b5));
+      } else {
+        m.add(nameSprite(p.n, color));
+      }
       this.scene.add(m);
       this.playerMeshes.set(p.id, m);
     }

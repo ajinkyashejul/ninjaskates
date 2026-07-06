@@ -42,6 +42,7 @@ let predTimer = null;
 let chosenMap = 'skatepark';
 let chosenMin = 3;
 let chosenBots = 3;
+let chosenClones = true;
 
 function initMenu() {
   // restore name
@@ -75,6 +76,7 @@ function initMenu() {
   };
   pillGroup('duration-group', 'min', (v) => { chosenMin = v; });
   pillGroup('bots-group', 'bots', (v) => { chosenBots = v; });
+  pillGroup('clones-group', 'clones', (v) => { chosenClones = v === 1; });
 
   $('btn-quick').addEventListener('click', () => play('quick'));
   $('btn-create').addEventListener('click', () => play('create'));
@@ -133,7 +135,7 @@ async function play(mode, joinCode) {
       }
     } else {
       const body = mode === 'create'
-        ? { map: chosenMap, duration: chosenMin * 60, bots: chosenBots, room: $('code-input')?.value || '' }
+        ? { map: chosenMap, duration: chosenMin * 60, bots: chosenBots, clones: chosenClones, room: $('code-input')?.value || '' }
         : mode === 'join' ? { room: joinCode } : {};
       const res = await fetch(`/api/${mode}`, {
         method: 'POST',
@@ -269,6 +271,10 @@ function processEvents(events) {
       case 'drift':
         if (ev.id === myId) { sfx.drift(); renderer?.shake(0.12, 0.15); }
         renderer?.spawnDriftBoost(ev.x, ev.z);
+        break;
+      case 'clone':
+        renderer?.spawnExplosion(ev.x, ev.z, false);
+        if (ev.oi === myId) { hud.toast('☁ A shadow clone joined your army!'); sfx.shield(); }
         break;
       case 'boom':
         renderer?.spawnExplosion(ev.x, ev.z, !!ev.big);

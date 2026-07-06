@@ -71,6 +71,7 @@ app.post('/api/create', (req, res) => {
       duration: body.duration === 360 ? 360 : 180,
       isPublic: false,
       botCount: Math.max(0, Math.min(6, body.bots | 0)),
+      clones: body.clones !== false,
     });
     rooms.set(wanted, room);
     return res.json({ room: wanted });
@@ -80,6 +81,7 @@ app.post('/api/create', (req, res) => {
     duration: body.duration === 360 ? 360 : 180,
     isPublic: false,
     botCount: Math.max(0, Math.min(6, body.bots | 0)),
+    clones: body.clones !== false,
   });
   res.json({ room: room.code });
 });
