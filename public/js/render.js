@@ -262,50 +262,56 @@ export function buildSkater(color) {
   const skin = mat(SKIN);
   const pad = mat(PAD);
 
-  // ---- shorts / hips
-  const shorts = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.44), mat(SHORTS));
-  shorts.position.y = 0.72;
+  // ---- hips / shorts with leg cuffs
+  const shorts = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.42), mat(SHORTS));
+  shorts.position.y = 0.86;
   body.add(shorts);
+  for (const side of [-1, 1]) {
+    const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.18), mat(SHORTS));
+    cuff.position.set(0, 0.76, side * 0.13);
+    body.add(cuff);
+  }
 
-  // ---- legs: hip pivot -> thigh (shorts) -> skin shin -> knee pad -> boot
+  // ---- legs: longer + chunkier so the skating pose reads.
+  // hip pivot -> thigh (shorts) -> skin shin -> knee pad -> boot
   const mkLeg = (side) => {
     const pivot = new THREE.Group();
-    pivot.position.set(0, 0.7, side * 0.13);
+    pivot.position.set(0, 0.8, side * 0.14);
 
-    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.2, 0.19), mat(SHORTS));
-    thigh.position.y = -0.1;
+    const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.26, 0.2), mat(SHORTS));
+    thigh.position.y = -0.12;
     pivot.add(thigh);
 
-    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.3, 8), skin);
-    shin.position.y = -0.32;
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.088, 0.32, 8), skin);
+    shin.position.y = -0.4;
     pivot.add(shin);
 
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.095, 8, 6), pad);
-    knee.position.set(0.05, -0.22, 0);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), pad);
+    knee.position.set(0.06, -0.28, 0);
     pivot.add(knee);
 
-    // boot group counter-rotates so the skate stays near the ground plane
+    // boot group counter-rotates a little so pushes read as toe-flicks
     const boot = new THREE.Group();
-    boot.position.y = -0.5;
+    boot.position.y = -0.6;
     pivot.add(boot);
 
-    const bootMain = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.17, 0.19), mat(BOOT));
+    const bootMain = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.2), mat(BOOT));
     bootMain.position.set(0.05, -0.02, 0);
     boot.add(bootMain);
-    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(BOOT));
-    toe.position.set(0.24, -0.05, 0);
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 6), mat(BOOT));
+    toe.position.set(0.25, -0.05, 0);
     boot.add(toe);
-    const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.14, 0.21), mat(0xf3f0e8));
-    cuff.position.set(-0.07, 0.1, 0);
+    const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.22), mat(0xf3f0e8));
+    cuff.position.set(-0.06, 0.12, 0);
     boot.add(cuff);
-    const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.06), pad);
-    chassis.position.set(0.04, -0.12, 0);
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.06), pad);
+    chassis.position.set(0.04, -0.14, 0);
     boot.add(chassis);
     const wheels = [];
     for (const wx of [-0.09, 0.04, 0.17]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 10), mat(0xffd84d));
       w.rotation.x = Math.PI / 2;
-      w.position.set(wx, -0.17, 0);
+      w.position.set(wx, -0.19, 0);
       boot.add(w);
       wheels.push(w);
     }
@@ -316,29 +322,34 @@ export function buildSkater(color) {
   const legR = mkLeg(1);
   body.add(legL, legR);
 
-  // ---- torso (shirt in player color)
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.27, 0.26, 4, 10), shirt);
-  torso.position.y = 1.04;
+  // ---- torso: slimmer T-shirt with shoulder caps, plus a neck
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.23, 0.36, 4, 10), shirt);
+  torso.position.y = 1.16;
   body.add(torso);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.12, 8), skin);
+  neck.position.y = 1.44;
+  body.add(neck);
 
-  // ---- arms: bent at the elbow, held forward like a skater
+  // ---- arms: full bent speed-skater arms that pump with the stride
   const mkArm = (side) => {
     const pivot = new THREE.Group();
-    pivot.position.set(0, 1.12, side * 0.31);
-    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.2, 4, 8), shirt);
-    upper.position.set(0.03, -0.13, 0);
-    upper.rotation.z = -0.25;
+    pivot.position.set(0, 1.34, side * 0.29);
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), shirt);
+    pivot.add(shoulder);
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 8), shirt);
+    upper.position.set(0.07, -0.15, side * 0.02);
+    upper.rotation.z = -0.5;
     pivot.add(upper);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), pad);
-    elbow.position.set(0.07, -0.26, 0);
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), pad);
+    elbow.position.set(0.17, -0.28, side * 0.02);
     pivot.add(elbow);
-    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.13, 4, 8), skin);
-    fore.position.set(0.16, -0.27, side * -0.03);
-    fore.rotation.z = -1.2;
+    const fore = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.2, 4, 8), skin);
+    fore.position.set(0.3, -0.31, side * -0.02);
+    fore.rotation.z = -1.35;
     pivot.add(fore);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), skin);
-    hand.position.set(0.25, -0.24, side * -0.04);
-    pivot.add(hand);
+    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.095, 8, 6), pad);
+    glove.position.set(0.43, -0.29, side * -0.03);
+    pivot.add(glove);
     return pivot;
   };
   const armL = mkArm(-1);
@@ -347,7 +358,7 @@ export function buildSkater(color) {
 
   // ---- head: big cartoon kid face + hair + helmet
   const head = new THREE.Group();
-  head.position.y = 1.52;
+  head.position.y = 1.74;
   body.add(head);
 
   const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.335, 12, 10), mat(HAIR));
@@ -377,8 +388,8 @@ export function buildSkater(color) {
     const sparkle = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), mat(0xffffff));
     sparkle.position.set(0.365, 0.035, side * 0.105);
     head.add(sparkle);
-    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.11), mat(HAIR));
-    brow.position.set(0.315, 0.13, side * 0.12);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.026, 0.1), mat(HAIR));
+    brow.position.set(0.318, 0.1, side * 0.12);
     head.add(brow);
     const blush = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 4), mat(0xffa38f));
     blush.scale.set(0.35, 0.55, 1);
@@ -1142,47 +1153,69 @@ export class Renderer {
     }
     u.lastX = p.x; u.lastZ = p.z; u.lastA = p.a;
 
-    // ---- skating stride: slow, powerful side pushes (not a walk cycle).
-    // Each leg extends BACK and OUT (V-stroke), then recovers under the body
-    // while the other pushes. Boots counter-rotate to stay near the ground.
+    // ---- skating stride. A skewed waveform makes it read as skating
+    // rather than walking: the push snaps, the recovery drifts back slowly
+    // (glide). Each leg extends BACK and OUT (V-stroke) with a toe-flick.
     const speedAbs = Math.abs(fwdSp);
     const moving = speedAbs > 0.6;
-    const freq = 0.9 + Math.min(speedAbs, 12) * 0.11; // strides/sec, capped
+    const freq = 0.8 + Math.min(speedAbs, 12) * 0.1; // strides/sec, capped
     if (moving) u.phase += freq * dt * Math.PI * 2 * Math.sign(fwdSp);
     const amp = Math.min(1, speedAbs / 5);
+    const wave = (ph) => Math.sin(ph + 0.5 * Math.sin(ph)); // fast push, slow recover
+
+    const targetRoll = Math.max(-0.45, Math.min(0.45, (dA / Math.max(dt, 1e-3)) * Math.min(sp, 12) * 0.012));
+    u.roll += (targetRoll - u.roll) * Math.min(1, dt * 8);
 
     const legs = [[u.legL, -1, 0], [u.legR, 1, Math.PI]];
     for (const [leg, side, off] of legs) {
-      const s = Math.sin(u.phase + off);
+      const s = wave(u.phase + off);
       const push = Math.max(0, s); // extension half of the cycle
       const rec = Math.max(0, -s); // recovery half
-      const targetZ = (0.32 * rec - 0.55 * push) * amp; // back-extension
-      const targetX = side * 0.5 * push * amp; // outward splay = the V-stroke
-      leg.rotation.z = moving ? targetZ : 0.06;
-      leg.rotation.x = moving ? targetX : side * 0.05;
+      if (moving) {
+        leg.rotation.z = (0.3 * rec - 0.62 * push) * amp;
+        leg.rotation.x = side * (0.06 + 0.55 * push) * amp;
+      } else {
+        // relaxed stagger while standing
+        leg.rotation.z = side * 0.06 + 0.02 * Math.sin(elapsed * 1.2);
+        leg.rotation.x = side * 0.06;
+      }
       const boot = leg.userData.boot;
-      boot.rotation.z = -leg.rotation.z * 0.75; // keep the skate level-ish
-      boot.rotation.x = -leg.rotation.x * 0.5;
+      boot.rotation.z = -leg.rotation.z * 0.45; // partial: trailing toe drops
+      boot.rotation.x = -leg.rotation.x * 0.55;
       for (const w of leg.userData.wheels) w.rotation.z -= fwdSp * dt / 0.06;
     }
 
-    // weight shifts over the gliding leg; torso counter-twists; body bobs
-    u.body.position.z = 0.08 * Math.sin(u.phase) * amp;
-    u.body.rotation.y = 0.12 * Math.sin(u.phase) * amp;
-    u.body.position.y = -0.06 * amp + 0.03 * Math.sin(2 * u.phase) * amp;
+    if (moving) {
+      // speed-skater posture: crouch deepens and chest drops with speed,
+      // weight rolls over the gliding leg, torso counter-twists
+      const crouch = 0.08 * amp + Math.min(0.13, speedAbs * 0.011);
+      u.body.position.y = -crouch + 0.03 * Math.sin(2 * u.phase) * amp;
+      u.body.position.z = 0.1 * Math.sin(u.phase) * amp;
+      u.body.rotation.y = 0.16 * Math.sin(u.phase) * amp;
+      u.body.rotation.z = -(0.1 + 0.36 * Math.min(1, speedAbs / 11));
 
-    // arms pump with the stride (they're pre-bent like a speed skater)
-    const swing = Math.sin(u.phase) * 0.45 * amp;
-    u.armL.rotation.z = swing;
-    u.armR.rotation.z = -swing;
-    u.armL.rotation.x = -0.15 * amp;
-    u.armR.rotation.x = 0.15 * amp;
+      const swing = wave(u.phase) * 0.55 * amp;
+      u.armL.rotation.z = swing;
+      u.armR.rotation.z = -swing;
+      u.armL.rotation.x = -0.12 * amp + u.roll * 0.5;
+      u.armR.rotation.x = 0.12 * amp + u.roll * 0.5;
+    } else {
+      // idle: balance sway, look around, tiny arm movement — never a statue
+      u.body.position.y = 0.01 * Math.sin(elapsed * 2.1);
+      u.body.position.z = 0.015 * Math.sin(elapsed * 1.3);
+      u.body.rotation.y = 0.04 * Math.sin(elapsed * 0.9);
+      u.body.rotation.z = -0.05;
+      u.armL.rotation.z = 0.05 * Math.sin(elapsed * 1.2);
+      u.armR.rotation.z = -0.05 * Math.sin(elapsed * 1.2);
+      u.armL.rotation.x = 0;
+      u.armR.rotation.x = 0;
+    }
 
-    // lean: crouch forward with speed, roll into turns
-    const targetRoll = Math.max(-0.45, Math.min(0.45, (dA / Math.max(dt, 1e-3)) * Math.min(sp, 12) * 0.012));
-    u.roll += (targetRoll - u.roll) * Math.min(1, dt * 8);
+    // roll into turns; head looks into the turn and stays level-ish while
+    // the body leans forward
     u.body.rotation.x = u.roll;
-    u.body.rotation.z = -(0.06 + 0.3 * Math.min(1, sp / 11));
+    u.head.rotation.y = u.roll * 0.9 + (moving ? 0 : 0.3 * Math.sin(elapsed * 0.45));
+    u.head.rotation.z = -u.body.rotation.z * 0.5;
 
     // ---- ground feel
     const now = elapsed;
@@ -1228,15 +1261,54 @@ export class Renderer {
     for (const p of view.players) {
       seen.add(p.id);
       const m = this._playerMesh(p);
+      const u = m.userData;
+
+      // detect life transitions for the smash / respawn animations
+      if (u.wasAlive && !p.al) {
+        u.dying = 0.7;
+        u.dieSpin = Math.random() > 0.5 ? 8 : -8;
+        u.dieYaw = (Math.random() - 0.5) * 5;
+      }
+      if (u.wasAlive === false && p.al) u.spawning = 0.45;
+      u.wasAlive = !!p.al;
+
+      if (u.dying > 0) {
+        // smashed: launched into the air, barrel-rolling, shrinking away
+        u.dying -= dt;
+        const t = Math.min(1, 1 - u.dying / 0.7);
+        m.visible = true;
+        m.position.set(p.x, Math.max(0, 3.4 * t - 3.6 * t * t), p.z);
+        m.rotation.y = -p.a + u.dieYaw * t;
+        u.body.rotation.x = u.dieSpin * t;
+        m.scale.setScalar(1.14 * (1 - 0.55 * t * t));
+        u.shield.visible = false;
+        if (u.dying <= 0) {
+          m.visible = false;
+          m.scale.setScalar(1.14);
+          u.body.rotation.x = 0;
+          m.position.y = 0;
+        }
+        continue;
+      }
+
       m.visible = !!p.al;
       m.position.set(p.x, 0, p.z);
       m.rotation.y = -p.a;
-      m.userData.shield.visible = !!p.sh;
-      m.userData.shield.material.opacity = 0.14 + 0.07 * Math.sin(elapsed * 8);
-      m.userData.torso.material.emissive.setHex(p.bo ? this.colorFor(p.id) : 0x000000);
-      m.userData.torso.material.emissiveIntensity = p.bo ? 0.45 : 0;
+
+      if (p.al && u.spawning > 0) {
+        // respawn: pop in with a bounce
+        u.spawning -= dt;
+        const st = Math.min(1, 1 - u.spawning / 0.45);
+        m.scale.setScalar(1.14 * (0.25 + 0.75 * st + 0.18 * Math.sin(st * Math.PI)));
+        if (u.spawning <= 0) m.scale.setScalar(1.14);
+      }
+
+      u.shield.visible = !!p.al && !!p.sh;
+      u.shield.material.opacity = 0.14 + 0.07 * Math.sin(elapsed * 8);
+      u.torso.material.emissive.setHex(p.bo ? this.colorFor(p.id) : 0x000000);
+      u.torso.material.emissiveIntensity = p.bo ? 0.45 : 0;
       if (p.al) this._animateSkater(m, p, dt, elapsed);
-      else m.userData.lastX = null;
+      else u.lastX = null;
     }
     for (const [id, m] of this.playerMeshes) {
       if (!seen.has(id)) { this.scene.remove(m); this.playerMeshes.delete(id); }

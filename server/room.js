@@ -11,13 +11,14 @@ const SNAPSHOT_EVERY = 2; // ticks -> 15Hz snapshots
 
 export const MAX_PLAYERS = 8;
 const PLAYER_RADIUS = 0.7;
-const ACCEL = 28;
+const ACCEL = 24;
+const KICK_ACCEL = 36; // harder first pushes: skaters launch off the line
 const BRAKE = 40;
 const MAX_SPEED = 14;
 const BOOST_MAX_SPEED = 19;
 const REVERSE_MAX = 6;
 const FRICTION = 10;
-const TURN_RATE = 3.2;
+const TURN_RATE = 3.4;
 const LATERAL_GRIP = 6.5; // how fast sideways slide decays (lower = driftier)
 const RESTITUTION = 0.4; // wall bounce
 const KNOCKBACK = 16; // explosion impulse at ground zero
@@ -253,10 +254,11 @@ export class Room {
     let fwd = p.vx * fx + p.vz * fz;
     let lat = -p.vx * fz + p.vz * fx;
 
+    const accel = Math.abs(fwd) < 6 ? KICK_ACCEL : ACCEL;
     if (inp.u && !inp.d) {
-      fwd += (fwd < 0 ? BRAKE : ACCEL) * dt;
+      fwd += (fwd < 0 ? BRAKE : accel) * dt;
     } else if (inp.d && !inp.u) {
-      fwd -= (fwd > 0 ? BRAKE : ACCEL) * dt;
+      fwd -= (fwd > 0 ? BRAKE : accel) * dt;
     } else {
       // coast toward zero
       const f = FRICTION * dt;
@@ -272,7 +274,7 @@ export class Room {
 
     // Steering: skaters pivot easily at low speed, grip more as they carve.
     if (inp.l !== inp.r && Math.abs(fwd) > 0.15) {
-      const grip = Math.min(1, 0.45 + Math.abs(fwd) / 9);
+      const grip = Math.min(1, 0.55 + Math.abs(fwd) / 10);
       const dir = (inp.l ? -1 : 1) * (fwd < 0 ? -1 : 1);
       p.angle = wrapAngle(p.angle + dir * TURN_RATE * grip * dt);
     }
