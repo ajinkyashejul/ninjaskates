@@ -107,8 +107,9 @@ export class Hud {
     this._flashTimer = setTimeout(() => f.classList.remove('show'), 120);
   }
 
-  setStandings(standings) {
+  setStandings(standings, session) {
     this.lastStandings = standings;
+    this.lastSession = session;
   }
 
   update(view, myId, ping) {
@@ -187,6 +188,20 @@ export class Hud {
               <td class="num">${s.k}</td>
               <td class="num">${s.d}</td>
             </tr>`).join('');
+        // session tally: office bragging rights across matches
+        const sess = this.lastSession;
+        const el = $('session-tally');
+        if (el) {
+          if (sess && sess.length && (sess.length > 1 || sess[0].w > 1)) {
+            el.textContent = `🏆 Session: ${sess.map((s) => `${s.n} ×${s.w}`).join('  ·  ')}`;
+            el.classList.remove('hidden');
+          } else if (sess && sess.length === 1) {
+            el.textContent = `🏆 ${sess[0].n} takes the first match of the session!`;
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        }
       }
     } else {
       results.classList.add('hidden');

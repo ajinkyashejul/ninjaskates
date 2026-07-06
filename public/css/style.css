@@ -334,3 +334,8 @@ html, body {
   font-weight: 700;
   padding: 9px 20px; border-radius: 14px; font-size: 15px; z-index: 30;
 }
+
+#session-tally {
+  color: #ffd84d; font-size: 18px; font-weight: 800;
+  margin-bottom: 10px; text-shadow: 0 2px 0 rgba(120, 80, 0, 0.45);
+}

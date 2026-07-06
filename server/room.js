@@ -59,6 +59,7 @@ export class Room {
       i, x: c.x, z: c.z, active: true, respawnAt: 0,
     }));
     this.events = [];
+    this.sessionWins = {}; // name -> match wins while this room lives
 
     this.time = 0; // simulation clock, seconds
     this.tick = 0;
@@ -211,7 +212,15 @@ export class Room {
     const standings = [...this.players.values()]
       .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths)
       .map((p) => ({ n: p.name, k: p.kills, d: p.deaths, bot: p.bot }));
-    this.events.push({ e: 'matchEnd', standings });
+    // session tally: who's winning the office session across matches
+    if (standings.length && standings[0].k > 0) {
+      this.sessionWins[standings[0].n] = (this.sessionWins[standings[0].n] || 0) + 1;
+    }
+    const session = Object.entries(this.sessionWins)
+      .map(([n, w]) => ({ n, w }))
+      .sort((a, b) => b.w - a.w)
+      .slice(0, 5);
+    this.events.push({ e: 'matchEnd', standings, session });
   }
 
   startMatch() {

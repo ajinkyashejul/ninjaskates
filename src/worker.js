@@ -40,12 +40,28 @@ export default {
     if (path === '/api/create' && request.method === 'POST') {
       let body = {};
       try { body = await request.json(); } catch { /* empty body is fine */ }
-      const code = await initRoom(env, {
+      const cfg = {
         mapId: MAPS[body.map] ? body.map : randomMapId(),
         duration: body.duration === 360 ? 360 : 180,
         isPublic: false,
         botCount: Math.max(0, Math.min(6, body.bots | 0)),
-      });
+      };
+      // vanity code support: "standing rooms" your group can bookmark; if
+      // the room already exists you simply join it
+      const wanted = String(body.room || '').toUpperCase().trim();
+      if (wanted) {
+        if (!/^[A-Z0-9]{4,8}$/.test(wanted)) {
+          return Response.json({ error: 'Room codes are 4-8 letters/numbers.' }, { status: 400 });
+        }
+        const stub = env.ROOMS.get(env.ROOMS.idFromName(wanted));
+        const res = await stub.fetch('https://do/init', {
+          method: 'POST',
+          body: JSON.stringify({ ...cfg, code: wanted }),
+        });
+        // 409 = already exists — that's fine, the caller joins it
+        return Response.json({ room: wanted, existed: res.status === 409 });
+      }
+      const code = await initRoom(env, cfg);
       if (!code) return Response.json({ error: 'Could not allocate a room.' }, { status: 500 });
       return Response.json({ room: code });
     }

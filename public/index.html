@@ -49,6 +49,9 @@
             <button class="map-card" data-map="rooftop">🏙️ Rooftop Rumble</button>
           </div>
         </div>
+        <label class="field"><span>Room code (optional — reuse it daily as your standing room)</span>
+          <input id="code-input" maxlength="8" placeholder="e.g. OFFICE" autocomplete="off" style="text-transform:uppercase" />
+        </label>
         <div class="row">
           <div class="field"><span>Match length</span>
             <div class="pill-group" id="duration-group">
@@ -123,6 +126,7 @@
     <div id="results-overlay" class="center-overlay hidden">
       <h2>Match Over</h2>
       <table id="results-table"></table>
+      <p id="session-tally" class="hidden"></p>
       <p class="hint">Next match starting in <span id="results-secs">12</span>…</p>
     </div>
 

@@ -58,6 +58,23 @@ function findQuickRoom() {
 
 app.post('/api/create', (req, res) => {
   const body = req.body || {};
+  // vanity code support: "standing rooms" your group can bookmark; if the
+  // room already exists you simply join it
+  const wanted = String(body.room || '').toUpperCase().trim();
+  if (wanted) {
+    if (!/^[A-Z0-9]{4,8}$/.test(wanted)) {
+      return res.status(400).json({ error: 'Room codes are 4-8 letters/numbers.' });
+    }
+    if (rooms.has(wanted)) return res.json({ room: wanted, existed: true });
+    const room = new Room(wanted, {
+      mapId: MAPS[body.map] ? body.map : randomMapId(),
+      duration: body.duration === 360 ? 360 : 180,
+      isPublic: false,
+      botCount: Math.max(0, Math.min(6, body.bots | 0)),
+    });
+    rooms.set(wanted, room);
+    return res.json({ room: wanted });
+  }
   const room = createRoom({
     mapId: MAPS[body.map] ? body.map : randomMapId(),
     duration: body.duration === 360 ? 360 : 180,

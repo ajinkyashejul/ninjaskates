@@ -70,12 +70,15 @@ function initMenu() {
     play('join', code);
   });
 
-  // deep link: ?room=CODE jumps straight to the join tab
-  const linkRoom = new URLSearchParams(location.search).get('room');
+  // Deep link: ?room=CODE is a "standing room" — auto-join it, creating it
+  // if it doesn't exist yet, so a bookmarked link works every day. Falls
+  // back to the join tab when we don't know the player's name yet.
+  const linkRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
   if (linkRoom) {
     document.querySelector('[data-tab="join"]').click();
-    $('room-input').value = linkRoom.toUpperCase();
-    $('btn-join').textContent = `Join Room ${linkRoom.toUpperCase()}`;
+    $('room-input').value = linkRoom;
+    $('btn-join').textContent = `Join Room ${linkRoom}`;
+    if ($('name-input').value.trim()) play('standing', linkRoom);
   }
 }
 
@@ -92,20 +95,46 @@ async function play(mode, joinCode) {
   const name = $('name-input').value.trim();
   localStorage.setItem('nj_name', name);
   try {
-    const body = mode === 'create'
-      ? { map: chosenMap, duration: chosenMin * 60, bots: chosenBots }
-      : mode === 'join' ? { room: joinCode } : {};
-    const res = await fetch(`/api/${mode}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Could not reach the game server.');
+    let room;
+    if (mode === 'standing') {
+      // bookmarked room link: join it, or create it if it isn't up yet
+      const tryJoin = await fetch('/api/join', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ room: joinCode }),
+      });
+      if (tryJoin.ok) {
+        ({ room } = await tryJoin.json());
+      } else {
+        const res = await fetch('/api/create', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ room: joinCode, bots: 3 }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Could not reach the game server.');
+        }
+        ({ room } = await res.json());
+      }
+    } else {
+      const body = mode === 'create'
+        ? { map: chosenMap, duration: chosenMin * 60, bots: chosenBots, room: $('code-input')?.value || '' }
+        : mode === 'join' ? { room: joinCode } : {};
+      const res = await fetch(`/api/${mode}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Could not reach the game server.');
+      }
+      ({ room } = await res.json());
     }
-    const { room } = await res.json();
     await net.connect(`/ws/${room}?name=${encodeURIComponent(name)}`);
+    // put the room in the URL so a refresh drops you straight back in
+    history.replaceState(null, '', `/?room=${room}`);
   } catch (err) {
     menuError(err.message);
   }
@@ -183,7 +212,7 @@ function processEvents(events) {
         if (ev.id === myId) { hud.pickupBanner(ev.label); sfx.pickup(); }
         break;
       case 'matchEnd':
-        hud.setStandings(ev.standings);
+        hud.setStandings(ev.standings, ev.session);
         sfx.countdownEnd();
         break;
       case 'matchStart':
