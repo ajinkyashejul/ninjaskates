@@ -428,7 +428,7 @@ function loop() {
   const view = buildView();
   if (!view || !renderer) return;
   renderer.update(view, myId, dt, elapsed);
-  hud.update(view, myId, net.ping);
+  hud.update(view, myId, net.ping, mapDef);
 }
 
 initMenu();

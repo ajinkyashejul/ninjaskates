@@ -43,7 +43,7 @@ function gridTexture(fill, line) {
 // sandy paths, a pond, wet sand near the shore, foam, starfish.
 // World coords map to canvas as px = (x+beachR)/(2*beachR)*S (same for z/py).
 function islandTexture(theme, beachR, playR, paint = {}) {
-  const S = 1024;
+  const S = 2048;
   const k = S / (2 * beachR); // world units -> px
   const px = (w) => (w + beachR) * k;
   const c = document.createElement('canvas');
@@ -53,14 +53,14 @@ function islandTexture(theme, beachR, playR, paint = {}) {
   g.fillRect(0, 0, S, S);
 
   // sun-bleached blotches + darker speckles
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 240; i++) {
     g.fillStyle = `rgba(255, 250, 220, ${0.05 + Math.random() * 0.05})`;
     const r = 30 + Math.random() * 90;
     g.beginPath();
     g.ellipse(Math.random() * S, Math.random() * S, r, r * 0.6, Math.random() * 3, 0, 7);
     g.fill();
   }
-  for (let i = 0; i < 500; i++) {
+  for (let i = 0; i < 1800; i++) {
     g.fillStyle = `rgba(160, 120, 60, ${0.06 + Math.random() * 0.08})`;
     g.beginPath();
     g.arc(Math.random() * S, Math.random() * S, 1 + Math.random() * 2, 0, 7);
@@ -109,7 +109,7 @@ function islandTexture(theme, beachR, playR, paint = {}) {
   // sandy paths carved through the lawn, crossing at the middle
   g.strokeStyle = hex(theme.floor);
   g.lineCap = 'round';
-  g.lineWidth = 44;
+  g.lineWidth = 54;
   g.beginPath();
   g.moveTo(px(-24), px(-4));
   g.quadraticCurveTo(px(0), px(4), px(24), px(-2));
@@ -118,12 +118,20 @@ function islandTexture(theme, beachR, playR, paint = {}) {
   g.moveTo(px(-3), px(-24));
   g.quadraticCurveTo(px(3), px(0), px(-2), px(24));
   g.stroke();
+  g.beginPath();
+  g.moveTo(px(-playR * 0.75), px(-playR * 0.55));
+  g.quadraticCurveTo(px(-20), px(20), px(playR * 0.6), px(playR * 0.72));
+  g.stroke();
+  g.beginPath();
+  g.moveTo(px(playR * 0.8), px(-playR * 0.5));
+  g.quadraticCurveTo(px(10), px(-15), px(-playR * 0.55), px(playR * 0.78));
+  g.stroke();
 
-  // pond with pale shore ring and highlights
-  if (paint.pond) {
-    const cx = px(paint.pond.x);
-    const cy = px(paint.pond.z);
-    const r = paint.pond.r * k;
+  // ponds with pale shore rings and highlights
+  for (const pond of paint.ponds || (paint.pond ? [paint.pond] : [])) {
+    const cx = px(pond.x);
+    const cy = px(pond.z);
+    const r = pond.r * k;
     g.fillStyle = 'rgba(255, 250, 230, 0.85)';
     g.beginPath(); g.arc(cx, cy, r * 1.12, 0, 7); g.fill();
     g.fillStyle = hex(theme.water);
@@ -141,26 +149,26 @@ function islandTexture(theme, beachR, playR, paint = {}) {
 
   // wet sand near the waterline, then foam at the very edge
   g.strokeStyle = 'rgba(180, 140, 85, 0.3)';
-  g.lineWidth = 40;
+  g.lineWidth = 70;
   g.beginPath();
   g.arc(S / 2, S / 2, playR * k + 26, 0, 7);
   g.stroke();
   g.strokeStyle = 'rgba(255,255,255,0.55)';
-  g.lineWidth = 22;
+  g.lineWidth = 34;
   g.beginPath();
-  g.arc(S / 2, S / 2, S / 2 - 14, 0, 7);
+  g.arc(S / 2, S / 2, S / 2 - 20, 0, 7);
   g.stroke();
   g.strokeStyle = 'rgba(255,255,255,0.25)';
-  g.lineWidth = 44;
+  g.lineWidth = 66;
   g.beginPath();
-  g.arc(S / 2, S / 2, S / 2 - 38, 0, 7);
+  g.arc(S / 2, S / 2, S / 2 - 58, 0, 7);
   g.stroke();
 
   // starfish on the open sand (between the lawns and the shore)
   const starColors = ['#ff8aa0', '#c77bff', '#5bc8ff', '#ffb45e'];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + 0.4;
-    const rr = S * (0.3 + (i % 3) * 0.05);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2 + 0.4;
+    const rr = S * (0.28 + (i % 4) * 0.05);
     const x = S / 2 + Math.cos(a) * rr;
     const y = S / 2 + Math.sin(a) * rr;
     const r = 10 + Math.random() * 9;
@@ -685,9 +693,9 @@ export class Renderer {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(map.theme.sky);
-    this.scene.fog = new THREE.Fog(map.theme.fog, 70, 170);
+    this.scene.fog = new THREE.Fog(map.theme.fog, 80, 300);
 
-    this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 900);
     this.camera.position.set(0, 30, 30);
     this.fov = 56;
 
@@ -695,16 +703,18 @@ export class Renderer {
     const sun = new THREE.DirectionalLight(0xfff2dd, 1.5);
     sun.position.set(35, 55, 22);
     sun.castShadow = true;
-    const range = Math.max(map.width, map.depth) * 0.75;
+    const range = 65; // tight frustum — the light FOLLOWS the player
     sun.shadow.camera.left = -range;
     sun.shadow.camera.right = range;
     sun.shadow.camera.top = range;
     sun.shadow.camera.bottom = -range;
     sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 150;
+    sun.shadow.camera.far = 160;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0005;
+    this.sun = sun;
     this.scene.add(sun);
+    this.scene.add(sun.target);
 
     // image-based lighting from a Poly Haven HDRI — richer materials for free
     new RGBELoader().load(
@@ -764,8 +774,9 @@ export class Renderer {
   }
 
   _buildSky(map) {
+    const domeR = Math.max(240, Math.max(map.width, map.depth) * 0.95);
     const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(180, 16, 12),
+      new THREE.SphereGeometry(domeR, 16, 12),
       new THREE.MeshBasicMaterial({
         map: skyTexture(map.theme.skyTop ?? map.theme.sky, map.theme.skyBottom ?? map.theme.fog),
         side: THREE.BackSide,
@@ -777,7 +788,7 @@ export class Renderer {
     if (map.style === 'neon') return; // no clouds over the night rink
     const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.92 });
     const R = Math.max(map.width, map.depth);
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 16; i++) {
       const cloud = new THREE.Group();
       const puffs = 2 + (i % 3);
       for (let p = 0; p < puffs; p++) {
@@ -787,8 +798,8 @@ export class Renderer {
         m.position.set(p * s * 1.1, (p % 2) * 0.6, (p % 2) * s * 0.4);
         cloud.add(m);
       }
-      const a = (i / 9) * Math.PI * 2;
-      cloud.position.set(Math.cos(a) * R * (0.7 + (i % 3) * 0.25), 20 + (i % 4) * 4, Math.sin(a) * R * (0.7 + ((i + 1) % 3) * 0.25));
+      const a = (i / 16) * Math.PI * 2;
+      cloud.position.set(Math.cos(a) * R * (0.35 + (i % 3) * 0.18), 30 + (i % 4) * 8, Math.sin(a) * R * (0.35 + ((i + 1) % 3) * 0.18));
       this.scene.add(cloud);
     }
   }
@@ -853,14 +864,14 @@ export class Renderer {
 
     // shallow turquoise gradient where the beach meets the sea
     const shallows = new THREE.Mesh(
-      new THREE.RingGeometry(beachR - 0.5, beachR + 5.5, 64),
+      new THREE.RingGeometry(beachR - 0.5, beachR + 4 + R * 0.06, 96),
       new THREE.MeshBasicMaterial({ color: 0x7fe3f2, transparent: true, opacity: 0.55 }),
     );
     shallows.rotation.x = -Math.PI / 2;
     shallows.position.y = -0.06;
     this.scene.add(shallows);
     const foamEdge = new THREE.Mesh(
-      new THREE.RingGeometry(beachR - 0.3, beachR + 0.55, 64),
+      new THREE.RingGeometry(beachR - 0.4, beachR + 0.8, 96),
       new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }),
     );
     foamEdge.rotation.x = -Math.PI / 2;
@@ -887,9 +898,9 @@ export class Renderer {
 
     // animated ocean all around
     const waterTex = waterTexture(theme.water, theme.waterDeep);
-    waterTex.repeat.set(20, 20);
+    waterTex.repeat.set(Math.max(20, R / 4.5), Math.max(20, R / 4.5));
     this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(480, 480),
+      new THREE.PlaneGeometry(R * 9, R * 9),
       new THREE.MeshBasicMaterial({ map: waterTex }),
     );
     this.water.rotation.x = -Math.PI / 2;
@@ -898,7 +909,7 @@ export class Renderer {
 
     // circular wooden fence exactly on the play boundary
     const wood = mat(theme.wall);
-    const rail = new THREE.Mesh(new THREE.TorusGeometry(R, 0.07, 6, 96), wood);
+    const rail = new THREE.Mesh(new THREE.TorusGeometry(R, 0.07, 6, 256), wood);
     rail.rotation.x = -Math.PI / 2;
     rail.position.y = 0.62;
     this.scene.add(rail);
@@ -906,7 +917,7 @@ export class Renderer {
     rail2.position.y = 0.34;
     this.scene.add(rail2);
     const postGeo = new THREE.CylinderGeometry(0.09, 0.11, 0.95, 7);
-    const posts = Math.round((2 * Math.PI * R) / 4);
+    const posts = Math.round((2 * Math.PI * R) / 6);
     for (let i = 0; i < posts; i++) {
       const a = (i / posts) * Math.PI * 2;
       const post = new THREE.Mesh(postGeo, wood);
@@ -917,8 +928,9 @@ export class Renderer {
 
     // rocky shoreline ring between fence and water
     const rockMat = mat(theme.rock);
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * Math.PI * 2 + Math.random() * 0.1;
+    const shoreRocks = Math.round((2 * Math.PI * R) / 12);
+    for (let i = 0; i < shoreRocks; i++) {
+      const a = (i / shoreRocks) * Math.PI * 2 + Math.random() * 0.1;
       const rr = R + 1.6 + Math.random() * 1.6;
       const r = 0.6 + Math.random() * 1.0;
       const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), rockMat);
@@ -1020,14 +1032,14 @@ export class Renderer {
 
     // glowing rink wall
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(R + 0.3, 0.45, 10, 96),
+      new THREE.TorusGeometry(R + 0.3, 0.45, 10, 220),
       mat(0x35ffd5, { emissive: 0x35ffd5, emissiveIntensity: 0.9 }),
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.7;
     this.scene.add(ring);
     const ring2 = new THREE.Mesh(
-      new THREE.TorusGeometry(R + 0.3, 0.18, 8, 96),
+      new THREE.TorusGeometry(R + 0.3, 0.18, 8, 220),
       mat(0xff4dd2, { emissive: 0xff4dd2, emissiveIntensity: 0.9 }),
     );
     ring2.rotation.x = -Math.PI / 2;
@@ -1595,6 +1607,10 @@ export class Renderer {
     // Higher and further back than a racing cam so you can read the arena,
     // looking slightly ahead of the skater like Smash Karts does.
     const me = view.players.find((p) => p.id === myId);
+    if (me && this.sun) {
+      this.sun.position.set(me.x + 35, 55, me.z + 22);
+      this.sun.target.position.set(me.x, 0, me.z);
+    }
     if (me && !window.__freezeCam) {
       const back = 9.6;
       const target = new THREE.Vector3(

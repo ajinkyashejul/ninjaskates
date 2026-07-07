@@ -10,8 +10,8 @@ export const PLAYER_RADIUS = 0.7;
 const ACCEL = 24;
 const KICK_ACCEL = 38; // harder first pushes: skaters launch off the line
 const BRAKE = 42;
-const MAX_SPEED = 15;
-const BOOST_MAX_SPEED = 19.5;
+const MAX_SPEED = 17;
+const BOOST_MAX_SPEED = 22;
 const REVERSE_MAX = 6;
 const FRICTION = 10;
 const TURN_RATE = 3.6;
@@ -22,7 +22,7 @@ const RESTITUTION = 0.4; // wall bounce
 const OVERSPEED_DECAY = 7; // how fast a drift boost bleeds back to cap
 
 export const DRIFT_MIN_CHARGE = 0.6; // seconds of sliding to earn the boost
-const DRIFT_BOOST = 6.5;
+const DRIFT_BOOST = 7.5;
 
 export function wrapAngle(a) {
   while (a > Math.PI) a -= Math.PI * 2;

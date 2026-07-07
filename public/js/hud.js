@@ -124,7 +124,60 @@ export class Hud {
     this.lastSession = session;
   }
 
-  update(view, myId, ping) {
+  drawMinimap(view, myId, map) {
+    const c = $('minimap');
+    if (!c || !map) return;
+    const g = c.getContext('2d');
+    const S = c.width;
+    const half = S / 2;
+    const scale = (S - 14) / Math.max(map.width, map.depth);
+    g.clearRect(0, 0, S, S);
+    g.save();
+    g.translate(half, half);
+
+    // arena boundary
+    g.fillStyle = 'rgba(14, 36, 66, 0.62)';
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 2;
+    g.beginPath();
+    if (map.shape === 'circle') g.arc(0, 0, map.radius * scale, 0, 7);
+    else g.rect(-map.width / 2 * scale, -map.depth / 2 * scale, map.width * scale, map.depth * scale);
+    g.fill();
+    g.stroke();
+
+    // active crates (faint)
+    g.fillStyle = 'rgba(255, 200, 90, 0.5)';
+    for (let i = 0; i < map.crates.length; i++) {
+      if (!view.crates[i]) continue;
+      const cr = map.crates[i];
+      g.fillRect(cr.x * scale - 1, cr.z * scale - 1, 2, 2);
+    }
+
+    // players
+    for (const p of view.players) {
+      if (!p.al) continue;
+      if (p.id === myId) continue;
+      g.fillStyle = p.cl ? 'rgba(160,170,190,0.8)' : '#ff5a5a';
+      g.beginPath();
+      g.arc(p.x * scale, p.z * scale, p.cl ? 1.6 : 2.6, 0, 7);
+      g.fill();
+    }
+    const me = view.players.find((p) => p.id === myId);
+    if (me && me.al) {
+      g.translate(me.x * scale, me.z * scale);
+      g.rotate(me.a);
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(5.5, 0);
+      g.lineTo(-3.5, 3);
+      g.lineTo(-3.5, -3);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
+  update(view, myId, ping, map) {
     // timer
     const t = Math.max(0, view.timeLeft);
     const mm = Math.floor(t / 60);
@@ -235,6 +288,8 @@ export class Hud {
       results.classList.add('hidden');
       this._resultsRendered = false;
     }
+
+    this.drawMinimap(view, myId, map);
 
     // net stats
     this._fpsFrames++;
